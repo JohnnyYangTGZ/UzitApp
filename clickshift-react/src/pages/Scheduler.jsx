@@ -210,6 +210,7 @@ export default function Scheduler() {
           shift_time,
           schedule_pattern,
           is_on_call,
+          secondary_roles,
           users!employee_profiles_user_id_fkey!inner (
             id,
             name,
@@ -332,8 +333,12 @@ export default function Scheduler() {
             if (dayVal.trim() !== shiftTimeStr?.trim()) return false;
           }
 
-          // Must match role
-          if ((emp.staffing_role || '').trim() !== (shift.staffing_role || '').trim()) return false;
+          // Must match role (primary or secondary)
+          const primaryRole = (emp.staffing_role || '').trim();
+          const shiftRole = (shift.staffing_role || '').trim();
+          const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
+          
+          if (primaryRole !== shiftRole && !hasSecondary) return false;
           
           // Must be authorized for this clinic
           const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];

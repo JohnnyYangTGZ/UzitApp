@@ -41,6 +41,7 @@ export default function ManagerEmployees() {
         shift_time,
         schedule_pattern,
         is_on_call,
+        secondary_roles,
         users!employee_profiles_user_id_fkey!inner (
           id,
           name,
@@ -433,6 +434,25 @@ export default function ManagerEmployees() {
                             ))
                           ) : (
                             <span className="text-sm text-slate-500 italic">No assigned locations.</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Secondary Roles */}
+                      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                          <span className="material-symbols-outlined text-purple-600">badge</span>
+                          Secondary Roles
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedEmployee?.secondary_roles?.length > 0 ? (
+                            selectedEmployee.secondary_roles.map((sr, idx) => (
+                              <span key={idx} className="bg-purple-50 text-purple-700 border border-purple-100 text-sm px-3 py-1.5 rounded-lg font-medium tracking-wider uppercase">
+                                {sr}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500 italic">No secondary roles assigned.</span>
                           )}
                         </div>
                       </div>

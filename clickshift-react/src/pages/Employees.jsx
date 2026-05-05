@@ -24,7 +24,8 @@ export default function Employees() {
     shift_time: '',
     is_on_call: false,
     schedulePattern: DEFAULT_PATTERN,
-    clinics: [] // Array of clinic_ids
+    clinics: [], // Array of clinic_ids
+    secondary_roles: [] // Array of secondary role strings
   });
 
   async function loadEmployees() {
@@ -41,6 +42,7 @@ export default function Employees() {
         shift_time,
         schedule_pattern,
         is_on_call,
+        secondary_roles,
         users!employee_profiles_user_id_fkey!inner (
           id,
           name,
@@ -115,7 +117,8 @@ export default function Employees() {
         shift_time: '',
         is_on_call: false,
         schedulePattern: DEFAULT_PATTERN,
-        clinics: clinics.length > 0 ? [clinics[0].id] : []
+        clinics: clinics.length > 0 ? [clinics[0].id] : [],
+        secondary_roles: []
       });
       setIsCreating(true);
       setIsEditing(true);
@@ -142,7 +145,8 @@ export default function Employees() {
       shift_time: selectedEmployee.shift_time || '',
       is_on_call: selectedEmployee.is_on_call || false,
       schedulePattern: selectedEmployee.schedule_pattern || DEFAULT_PATTERN,
-      clinics: clinicIds
+      clinics: clinicIds,
+      secondary_roles: selectedEmployee.secondary_roles || []
     });
     setIsEditing(true);
   };
@@ -159,6 +163,17 @@ export default function Employees() {
         return { ...prev, clinics: prev.clinics.filter(id => id !== clinicId) };
       } else {
         return { ...prev, clinics: [...prev.clinics, clinicId] };
+      }
+    });
+  };
+
+  const handleSecondaryRoleToggle = (roleName) => {
+    setEditForm(prev => {
+      const isSelected = prev.secondary_roles.includes(roleName);
+      if (isSelected) {
+        return { ...prev, secondary_roles: prev.secondary_roles.filter(r => r !== roleName) };
+      } else {
+        return { ...prev, secondary_roles: [...prev.secondary_roles, roleName] };
       }
     });
   };
@@ -202,7 +217,8 @@ export default function Employees() {
           staffing_role: editForm.staffing_role,
           shift_time: editForm.shift_time,
           is_on_call: editForm.is_on_call,
-          schedule_pattern: editForm.schedulePattern
+          schedule_pattern: editForm.schedulePattern,
+          secondary_roles: editForm.secondary_roles
         });
 
       if (profileError) {
@@ -241,7 +257,8 @@ export default function Employees() {
           job_title: `${getRoleDescription(editForm.staffing_role)}${editForm.is_on_call ? ' (on-call)' : ''}`,
           shift_time: editForm.shift_time,
           is_on_call: editForm.is_on_call,
-          schedule_pattern: editForm.schedulePattern
+          schedule_pattern: editForm.schedulePattern,
+          secondary_roles: editForm.secondary_roles
         })
         .eq('user_id', selectedEmployee.user_id);
 
@@ -547,6 +564,38 @@ export default function Employees() {
                         ) : (
                           <span className="text-sm font-semibold text-slate-900">{selectedEmployee?.is_on_call ? 'Yes' : 'No'}</span>
                         )}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className="text-xs text-slate-500 font-medium">Secondary Roles</span>
+                        <div className="flex flex-wrap gap-2">
+                          {isEditing ? (
+                            availableRoles.filter(r => r.name !== editForm.staffing_role).map(role => {
+                              const isSelected = editForm.secondary_roles.includes(role.name);
+                              return (
+                                <button
+                                  key={role.name}
+                                  onClick={() => handleSecondaryRoleToggle(role.name)}
+                                  className={`text-xs px-2 py-1 rounded-full font-medium border transition-colors flex items-center gap-1 ${
+                                    isSelected 
+                                      ? 'bg-purple-600 text-white border-purple-600' 
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {isSelected && <span className="material-symbols-outlined text-[12px]">check</span>}
+                                  {role.name}
+                                </button>
+                              );
+                            })
+                          ) : selectedEmployee?.secondary_roles?.length > 0 ? (
+                            selectedEmployee.secondary_roles.map((sr, idx) => (
+                              <span key={idx} className="bg-purple-50 text-purple-700 border border-purple-100 text-xs px-2 py-1 rounded-full font-medium tracking-wider uppercase">
+                                {sr}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500 italic">No secondary roles.</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
