@@ -105,11 +105,13 @@ export default function AdminDashboard() {
       };
       
       if (validUserIds.length > 0) {
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profileError } = await supabase
           .from('employee_profiles')
-          .select('user_id, staffing_role, schedule_pattern, shift_time, users(name)')
+          .select('user_id, staffing_role, schedule_pattern, shift_time, users!employee_profiles_user_id_fkey(name)')
           .in('user_id', validUserIds)
           .eq('is_active', true);
+          
+        if (profileError) console.error('Error fetching profiles:', profileError);
           
         if (profiles) {
           profiles.forEach(prof => {
