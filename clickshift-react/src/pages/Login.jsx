@@ -49,18 +49,13 @@ export default function Login() {
             <img alt="Healthcare Environment" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4R82Q17SP6cfKCx96oNkh9nvCgmaxBBLT-Ewkcm5t00GOqh6Lvjbt5RwTil5i5hVposR3121i0haW4PvY4rD-TkRzA8Vd66f_ESmBu6Q_bhDIFCkNHxvja_O0hOJG9IB-h8f_m8ZPHtqi0kTTITqVt38T_x17vcS6NQIjhzjikrbfpwnp55AQxWZY3zvs11E-UeEOLObnuhujSftpLyaWtWEgNvJbxZ9Tx3IOrwApgmqbxTyb3tMfIUFgAumVIQdSech_asNFKV1X"/>
           </div>
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-8">
-              <span className="material-symbols-outlined text-white text-4xl">check_circle</span>
-              <h1 className="text-white font-h1 text-h1 tracking-tight">Uzit</h1>
+            <div className="mb-8">
+              <img src="/logo.png" alt="Uzit Logo" className="h-24 w-auto drop-shadow-md" />
             </div>
-            <h2 className="text-white font-h2 text-h2 mb-4">Staffing decisions made simple.</h2>
-            <p className="text-white/80 font-body-lg text-body-lg max-w-md">
-              Use it. Staff it. Done.
-            </p>
           </div>
           <div className="relative z-10 mt-auto">
             <div className="flex items-center gap-4 p-4 rounded-lg bg-white/5 backdrop-blur-sm border border-white/10">
-              <span className="text-white/90 font-label-sm text-label-sm uppercase">Join 1,200+ Healthcare Providers</span>
+              <span className="text-white/90 font-label-sm text-label-sm uppercase">Join the new wave of Healthcare Staffing.</span>
             </div>
           </div>
         </div>
