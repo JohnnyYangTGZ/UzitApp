@@ -18,6 +18,7 @@ export default function ManagerCalendar() {
   const [timeOffs, setTimeOffs] = useState([]);
   const [timeOffTypes, setTimeOffTypes] = useState([]);
   const [staffTypeFilter, setStaffTypeFilter] = useState('All Staff');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -115,7 +116,7 @@ export default function ManagerCalendar() {
       setLoading(false);
     }
     fetchData();
-  }, [selectedClinicId, currentMonth]);
+  }, [selectedClinicId, currentMonth, refreshTrigger]);
 
   const handleDateClick = (date) => {
     if (!date) return;
@@ -153,7 +154,7 @@ export default function ManagerCalendar() {
       console.error(error);
     } else {
       setSelectedTimeOffForDetails(null);
-      window.location.reload();
+      setRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -178,8 +179,7 @@ export default function ManagerCalendar() {
       console.error(error);
     } else {
       setIsModalOpen(false);
-      // Quick refresh to show new data
-      window.location.reload();
+      setRefreshTrigger(prev => prev + 1);
     }
   };
 
