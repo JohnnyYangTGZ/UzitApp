@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
+import { useAuth } from '../context/AuthContext';
 import ScheduleSelector, { DEFAULT_PATTERN } from '../components/ScheduleSelector';
 
 export default function Employees() {
@@ -12,6 +13,8 @@ export default function Employees() {
   const [errorMsg, setErrorMsg] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
+  
+  const { user: currentUser } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -25,7 +28,9 @@ export default function Employees() {
     is_on_call: false,
     schedulePattern: DEFAULT_PATTERN,
     clinics: [], // Array of clinic_ids
-    secondary_roles: [] // Array of secondary role strings
+    secondary_roles: [], // Array of secondary role strings
+    systemRole: 'staff',
+    newPassword: ''
   });
 
   async function loadEmployees() {
@@ -47,6 +52,7 @@ export default function Employees() {
           id,
           name,
           email,
+          role,
           employee_clinics (
             clinic_id,
             locations ( id, name )
@@ -118,7 +124,9 @@ export default function Employees() {
         is_on_call: false,
         schedulePattern: DEFAULT_PATTERN,
         clinics: clinics.length > 0 ? [clinics[0].id] : [],
-        secondary_roles: []
+        secondary_roles: [],
+        systemRole: 'staff',
+        newPassword: ''
       });
       setIsCreating(true);
       setIsEditing(true);
@@ -146,7 +154,9 @@ export default function Employees() {
       is_on_call: selectedEmployee.is_on_call || false,
       schedulePattern: selectedEmployee.schedule_pattern || DEFAULT_PATTERN,
       clinics: clinicIds,
-      secondary_roles: selectedEmployee.secondary_roles || []
+      secondary_roles: selectedEmployee.secondary_roles || [],
+      systemRole: selectedEmployee.users?.role || 'staff',
+      newPassword: ''
     });
     setIsEditing(true);
   };
@@ -193,8 +203,8 @@ export default function Employees() {
         .insert({
           name: fullName,
           email: editForm.email,
-          role: 'staff',
-          password: 'password123' // Default password required by schema
+          role: currentUser?.role === 'admin' ? editForm.systemRole : 'staff',
+          password: editForm.newPassword || 'password123' // Use custom or default
         })
         .select()
         .single();
@@ -236,10 +246,18 @@ export default function Employees() {
         await supabase.from('employee_clinics').insert(clinicInserts);
       }
     } else {
-      // Update users table (name, email)
+      // Update users table (name, email, conditionally role/password)
+      const userUpdatePayload = { name: fullName, email: editForm.email };
+      if (currentUser?.role === 'admin') {
+        userUpdatePayload.role = editForm.systemRole;
+        if (editForm.newPassword) {
+          userUpdatePayload.password = editForm.newPassword;
+        }
+      }
+
       const { error: userError } = await supabase
         .from('users')
-        .update({ name: fullName, email: editForm.email })
+        .update(userUpdatePayload)
         .eq('id', selectedEmployee.user_id);
         
       if (userError) {
@@ -498,6 +516,49 @@ export default function Employees() {
                       </div>
                     </div>
                   </div>
+
+                  {/* System Access (Admins Only) */}
+                  {currentUser?.role === 'admin' && (
+                    <div>
+                      <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">System Access</h4>
+                      <div className="bg-orange-50 rounded-lg p-4 space-y-4 border border-orange-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-orange-800 font-medium">Access Level</span>
+                          {isEditing ? (
+                            <select
+                              value={editForm.systemRole}
+                              onChange={e => setEditForm({...editForm, systemRole: e.target.value})}
+                              className="px-2 py-1 border border-orange-300 rounded text-sm bg-white w-32 focus:ring-1 focus:ring-orange-500 outline-none"
+                            >
+                              <option value="staff">Staff</option>
+                              <option value="manager">Manager</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          ) : (
+                            <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wider ${
+                              selectedEmployee?.users?.role === 'admin' ? 'bg-red-100 text-red-700' :
+                              selectedEmployee?.users?.role === 'manager' ? 'bg-orange-200 text-orange-800' :
+                              'bg-slate-200 text-slate-700'
+                            }`}>
+                              {selectedEmployee?.users?.role || 'staff'}
+                            </span>
+                          )}
+                        </div>
+                        {isEditing && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-orange-800 font-medium">Reset Password</span>
+                            <input 
+                              type="text" 
+                              value={editForm.newPassword} 
+                              onChange={e => setEditForm({...editForm, newPassword: e.target.value})}
+                              className="px-2 py-1.5 border border-orange-300 rounded text-sm w-32 focus:ring-1 focus:ring-orange-500 outline-none"
+                              placeholder={isCreating ? "password123" : "New password..."}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Operational Details */}
                   <div>
