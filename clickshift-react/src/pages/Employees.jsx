@@ -547,13 +547,25 @@ export default function Employees() {
                         {isEditing && (
                           <div className="flex justify-between items-center">
                             <span className="text-xs text-orange-800 font-medium">Reset Password</span>
-                            <input 
-                              type="text" 
-                              value={editForm.newPassword} 
-                              onChange={e => setEditForm({...editForm, newPassword: e.target.value})}
-                              className="px-2 py-1.5 border border-orange-300 rounded text-sm w-32 focus:ring-1 focus:ring-orange-500 outline-none"
-                              placeholder={isCreating ? "password123" : "New password..."}
-                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newPass = window.prompt(isCreating ? "Enter initial password:" : "Enter new password for this user:", "");
+                                if (newPass !== null && newPass.trim() !== '') {
+                                  setEditForm({...editForm, newPassword: newPass});
+                                }
+                              }}
+                              className="px-3 py-1 bg-white text-orange-700 hover:bg-orange-100 border border-orange-300 rounded text-xs font-semibold transition-colors flex items-center gap-1"
+                            >
+                              {editForm.newPassword ? (
+                                <>
+                                  <span className="material-symbols-outlined text-[14px]">check</span>
+                                  Will Reset
+                                </>
+                              ) : (
+                                "Set Password"
+                              )}
+                            </button>
                           </div>
                         )}
                       </div>
