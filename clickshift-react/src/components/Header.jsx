@@ -64,7 +64,7 @@ export default function Header() {
               />
             </div>
             <span className="font-medium text-slate-700">
-              {user?.name || user?.email}
+              {activeRole === 'admin' ? 'Admin Dashboard' : activeRole === 'manager' ? 'Manager Dashboard' : (user?.name || user?.email)}
             </span>
             <span className="material-symbols-outlined text-sm text-slate-400">expand_more</span>
           </button>
