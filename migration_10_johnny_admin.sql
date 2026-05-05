@@ -4,7 +4,7 @@ INSERT INTO users (id, name, email, password, role) VALUES
 
 -- Create Employee Profile
 INSERT INTO employee_profiles (user_id, employee_code, job_title, staffing_role, phone_number, shift_time, is_on_call, department_id, schedule_pattern) VALUES 
-('11111111-1111-1111-1111-111111111199', 'EMP-JOHNNY', 'System Administrator', 'admin', NULL, NULL, false, '11111111-1111-1111-1111-111111111100', array_fill(false, ARRAY[14]));
+('11111111-1111-1111-1111-111111111199', 'EMP-JOHNNY', 'System Administrator', 'admin', NULL, NULL, false, '11111111-1111-1111-1111-111111111100', '[false,false,false,false,false,false,false,false,false,false,false,false,false,false]'::jsonb);
 
 -- Grant access to all clinics
 INSERT INTO employee_clinics (user_id, clinic_id) VALUES 
