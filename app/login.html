@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login - ClickShift</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#1261a3",
+                        "on-surface": "#191c20",
+                        "surface-variant": "#e1e2e8",
+                        "on-secondary-fixed-variant": "#004f4f",
+                        "surface-bright": "#f8f9ff",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "tertiary": "#6a3100",
+                        "status-approved": "#2E7D32",
+                        "outline": "#727781",
+                        "status-pending": "#F9A825",
+                        "surface-container-low": "#f2f3f9",
+                        "outline-variant": "#c1c7d2",
+                        "surface-background": "#F8FAFC",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#414750",
+                        "on-primary-container": "#afd1ff",
+                        "on-secondary-container": "#007070",
+                        "tertiary-fixed": "#ffdcc7",
+                        "on-tertiary-fixed": "#311300",
+                        "secondary-fixed": "#8cf3f3",
+                        "on-primary-fixed-variant": "#00487f",
+                        "on-tertiary-container": "#ffc29c",
+                        "on-tertiary-fixed-variant": "#733600",
+                        "primary": "#004275",
+                        "status-off": "#757575",
+                        "surface-container-highest": "#e1e2e8",
+                        "secondary-container": "#8cf3f3",
+                        "surface-container": "#ecedf4",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#eff0f7",
+                        "surface-container-high": "#e7e8ee",
+                        "surface-border": "#E2E8F0",
+                        "primary-container": "#005a9c",
+                        "inverse-primary": "#a1c9ff",
+                        "status-denied": "#D32F2F",
+                        "surface": "#f8f9ff",
+                        "on-secondary-fixed": "#002020",
+                        "tertiary-fixed-dim": "#ffb787",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#2e3035",
+                        "primary-fixed": "#d2e4ff",
+                        "surface-dim": "#d8dae0",
+                        "tertiary-container": "#8d4401",
+                        "secondary-fixed-dim": "#6fd7d6",
+                        "primary-fixed-dim": "#a1c9ff",
+                        "on-background": "#191c20",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#006a6a",
+                        "on-primary-fixed": "#001c37",
+                        "on-secondary": "#ffffff",
+                        "background": "#f8f9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "row-height-dense": "40px",
+                        "grid-gutter": "1px",
+                        "container-padding": "24px",
+                        "sidebar-width": "260px",
+                        "base": "8px"
+                    },
+                    "fontFamily": {
+                        "h2": ["Inter"],
+                        "body-md": ["Inter"],
+                        "h3": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h1": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "data-tabular": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "h3": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "data-tabular": ["13px", {"lineHeight": "1.2", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-surface-background min-h-screen flex items-center justify-center p-6">
+<div class="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 bg-surface-container-lowest rounded-xl shadow-sm border border-surface-border overflow-hidden">
+<!-- Left Side: Hero Branding -->
+<div class="relative hidden md:flex flex-col justify-between p-12 bg-primary">
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+<img alt="Healthcare Environment" class="w-full h-full object-cover" data-alt="Modern high-tech outpatient clinic hallway with clean lines, soft natural lighting and a clinical professional atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4R82Q17SP6cfKCx96oNkh9nvCgmaxBBLT-Ewkcm5t00GOqh6Lvjbt5RwTil5i5hVposR3121i0haW4PvY4rD-TkRzA8Vd66f_ESmBu6Q_bhDIFCkNHxvja_O0hOJG9IB-h8f_m8ZPHtqi0kTTITqVt38T_x17vcS6NQIjhzjikrbfpwnp55AQxWZY3zvs11E-UeEOLObnuhujSftpLyaWtWEgNvJbxZ9Tx3IOrwApgmqbxTyb3tMfIUFgAumVIQdSech_asNFKV1X"/>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-8">
+<span class="material-symbols-outlined text-on-primary text-4xl" data-icon="clinical_notes">clinical_notes</span>
+<h1 class="text-on-primary font-h1 text-h1 tracking-tight">ClickShift</h1>
+</div>
+<h2 class="text-on-primary font-h2 text-h2 mb-4">Precision Staffing for Modern Care</h2>
+<p class="text-on-primary/80 font-body-lg text-body-lg max-w-md">
+                    Streamline your outpatient operations with our intelligent shift management and staff scheduling platform.
+                </p>
+</div>
+<div class="relative z-10 mt-auto">
+<div class="flex items-center gap-4 p-4 rounded-lg bg-white/5 backdrop-blur-sm border border-white/10">
+<div class="flex -space-x-2">
+<img alt="User avatar" class="h-8 w-8 rounded-full border-2 border-primary" data-alt="Portrait of a female doctor in a white coat smiling confidently" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBK6SQbjc1tuYD4OkRsUgxvmkQtIlA6MlYOv3Jc0kRUH2b3S2Zfkb6rtSizqBISoJwpLb5kVmYpgGHmwzsw3f-2upC1-XOsGldlx3m9RtXbG6rThX8WJZtwvoHZ07_4QMve1Yd1i93tXW84b1a2eNMdFn0IjiX6_YPVdceOQjZn_8dL_6YsyX0Kw7R0XdDt_8PDUPoLjobuhomtCupnvnWOMb7r6CNL6y6QXWSEd2KFxSWcOUh1SCsyPw1K8JnXH99K2KsZTjFYVwLv"/>
+<img alt="User avatar" class="h-8 w-8 rounded-full border-2 border-primary" data-alt="Portrait of a male healthcare worker in blue scrubs professional setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjbaH2JzCR88qcFBHfWGod02r5N-oG05P3uJZzgjiqpA6mwrpvXGJL6yRtagm85-VR9VtezpRK8Yv72XJ4zWyuWUZJ58EOo6UtXe_EbaNfurQkAFyA__mITNg_RM22hLk0ShRjcJk6nodBhqdKNY0lwZ9WovpreqtSLqfSf_aBKju1LHduDb2Rn_yemZCNdoRBRC4mCd5OwzQH5O989rQ0KzcR-2FkYBbsOLD5znkpO7Up5hIo91kn0Ly_9bBQ1W_31x6Y9I25rgY7"/>
+<img alt="User avatar" class="h-8 w-8 rounded-full border-2 border-primary" data-alt="Portrait of a medical professional looking at a digital tablet" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5dx9AhaWmCQPkfK2_w6rkIy8WSRdC_py5qJAI-CS18ue55KX6Hj-Z5B_iy6AXbjCaYYDEnN-wyoO4JVHhUOLX3gnjILdEEK6WMn4C8ZP_GYuacnm09HsYnq_YlNaVISrsy4B1Ibqc9IoH8u_rOLPtc70bv2WTsEvVsqT_fYVl3t_PDefnnFdZNmqyuDRJzSnfRGWqDzKooqJXzlhMcVPd1DZsokMMDdpiXLu4bWNjwmBy4e27gD2vnBaHCpUGuvLzOYw2OkGVL-Vk"/>
+</div>
+<span class="text-on-primary/90 font-label-sm text-label-sm uppercase">Join 1,200+ Healthcare Providers</span>
+</div>
+</div>
+</div>
+<!-- Right Side: Login Form -->
+<div class="flex flex-col justify-center p-8 md:p-16 lg:p-24 bg-surface-container-lowest">
+<div class="mb-10 text-center md:text-left">
+<div class="md:hidden flex justify-center mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="clinical_notes">clinical_notes</span>
+<h1 class="text-primary font-h1 text-h1 tracking-tight">ClickShift</h1>
+</div>
+</div>
+<h3 class="text-on-surface font-h3 text-h3 mb-2">Welcome Back</h3>
+<p class="text-on-surface-variant font-body-md text-body-md">Sign in to manage your center's operations.</p>
+</div>
+<form class="space-y-6">
+<!-- SSO Option -->
+<button class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-outline-variant hover:bg-surface-container transition-all active:scale-95" type="button">
+<img alt="Google Logo" class="w-5 h-5" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVtJIjIoluGGxwgZkvYfCFfX2ZebUZeEBk1cBXMh56fX-eA2-i-uj2DJ12Bhk64FMs8WYWKu0MIfHUnvGZfWaO1Eunq4HdiLmCvHkvoqh3EoksH-XceudP4l3bM3y6ZAIradD7G1UjV3b-zIKGIXyfqnFEfjEYCdjMCV6oYhtn9WkBJHSufUUnwGypa0NHNuM2dnAZJSFMoQLGOxqbwYHPMNpCeNkjVqadzmBghqXWw84OmWcqKNZVm8KR0O5_ABFmv6zbauRXfy-B"/>
+<span class="text-on-surface font-body-md text-body-md">Sign in with SSO</span>
+</button>
+<div class="relative flex items-center py-4">
+<div class="flex-grow border-t border-outline-variant"></div>
+<span class="flex-shrink mx-4 text-on-surface-variant font-label-sm text-label-sm uppercase">Or continue with</span>
+<div class="flex-grow border-t border-outline-variant"></div>
+</div>
+<!-- Traditional Login -->
+<div class="space-y-4">
+<div>
+<label class="block text-on-surface-variant font-label-sm text-label-sm mb-2 uppercase" for="email">Email Address</label>
+<input class="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary focus:border-secondary transition-all outline-none text-on-surface font-body-md" id="email" name="email" placeholder="name@outpatient.center" type="email"/>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<label class="text-on-surface-variant font-label-sm text-label-sm uppercase" for="password">Password</label>
+<a class="text-secondary font-label-sm text-label-sm uppercase hover:underline" href="#">Forgot Password?</a>
+</div>
+<input class="w-full px-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary focus:border-secondary transition-all outline-none text-on-surface font-body-md" id="password" name="password" placeholder="••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center">
+<input class="h-4 w-4 text-secondary focus:ring-secondary border-outline-variant rounded" id="remember" name="remember" type="checkbox"/>
+<label class="ml-2 block text-on-surface-variant font-body-md text-body-md" for="remember">Keep me signed in for 30 days</label>
+</div>
+<button class="w-full py-4 bg-secondary text-on-primary font-h3 text-body-lg rounded-lg shadow-sm hover:brightness-110 active:scale-98 transition-all" type="button" onclick="window.location.href='staff_dashboard.html'">
+                    Sign In
+                </button>
+</form>
+<div class="mt-12 text-center">
+<p class="text-on-surface-variant font-body-md text-body-md">
+                    New to ClickShift? <a class="text-secondary font-h3 text-body-md hover:underline" href="manager_dashboard.html">Register your clinic (Manager Demo)</a>
+</p>
+</div>
+<!-- Footer Links -->
+<div class="mt-auto pt-10 flex flex-wrap justify-center gap-x-6 gap-y-2">
+<a class="text-on-surface-variant/60 font-label-sm text-[10px] uppercase hover:text-secondary" href="#">Security</a>
+<a class="text-on-surface-variant/60 font-label-sm text-[10px] uppercase hover:text-secondary" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant/60 font-label-sm text-[10px] uppercase hover:text-secondary" href="#">Help Center</a>
+<span class="text-on-surface-variant/60 font-label-sm text-[10px] uppercase">v4.2.1-Prod</span>
+</div>
+</div>
+</div>
+</body></html>

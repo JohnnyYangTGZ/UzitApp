@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Staff Dashboard - ClickShift</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#1261a3",
+                      "on-surface": "#191c20",
+                      "surface-variant": "#e1e2e8",
+                      "on-secondary-fixed-variant": "#004f4f",
+                      "surface-bright": "#f8f9ff",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "tertiary": "#6a3100",
+                      "status-approved": "#2E7D32",
+                      "outline": "#727781",
+                      "status-pending": "#F9A825",
+                      "surface-container-low": "#f2f3f9",
+                      "outline-variant": "#c1c7d2",
+                      "surface-background": "#F8FAFC",
+                      "on-error": "#ffffff",
+                      "on-surface-variant": "#414750",
+                      "on-primary-container": "#afd1ff",
+                      "on-secondary-container": "#007070",
+                      "tertiary-fixed": "#ffdcc7",
+                      "on-tertiary-fixed": "#311300",
+                      "secondary-fixed": "#8cf3f3",
+                      "on-primary-fixed-variant": "#00487f",
+                      "on-tertiary-container": "#ffc29c",
+                      "on-tertiary-fixed-variant": "#733600",
+                      "primary": "#004275",
+                      "status-off": "#757575",
+                      "surface-container-highest": "#e1e2e8",
+                      "secondary-container": "#8cf3f3",
+                      "surface-container": "#ecedf4",
+                      "on-tertiary": "#ffffff",
+                      "inverse-on-surface": "#eff0f7",
+                      "surface-container-high": "#e7e8ee",
+                      "surface-border": "#E2E8F0",
+                      "primary-container": "#005a9c",
+                      "inverse-primary": "#a1c9ff",
+                      "status-denied": "#D32F2F",
+                      "surface": "#f8f9ff",
+                      "on-secondary-fixed": "#002020",
+                      "tertiary-fixed-dim": "#ffb787",
+                      "on-error-container": "#93000a",
+                      "inverse-surface": "#2e3035",
+                      "primary-fixed": "#d2e4ff",
+                      "surface-dim": "#d8dae0",
+                      "tertiary-container": "#8d4401",
+                      "secondary-fixed-dim": "#6fd7d6",
+                      "primary-fixed-dim": "#a1c9ff",
+                      "on-background": "#191c20",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#006a6a",
+                      "on-primary-fixed": "#001c37",
+                      "on-secondary": "#ffffff",
+                      "background": "#f8f9ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "row-height-dense": "40px",
+                      "grid-gutter": "1px",
+                      "container-padding": "24px",
+                      "sidebar-width": "260px",
+                      "base": "8px"
+              },
+              "fontFamily": {
+                      "h2": ["Inter"],
+                      "body-md": ["Inter"],
+                      "h3": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "h1": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "data-tabular": ["Inter"]
+              },
+              "fontSize": {
+                      "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "h3": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "data-tabular": ["13px", {"lineHeight": "1.2", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+        }
+    </style>
+</head>
+<body class="bg-surface-background text-on-surface">
+<header class="fixed top-0 w-full h-16 z-50 border-b border-slate-200 bg-white flex items-center justify-between px-6 font-['Inter'] text-sm tracking-tight">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tight text-blue-900">ClickShift</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-blue-700 font-semibold border-b-2 border-blue-700 py-5" href="staff_dashboard.html">Dashboard</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors" href="staff_schedule.html">My Schedule</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors" href="#">Requests</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<div class="flex items-center gap-2 pl-2 ml-2 border-l border-slate-200">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-slate-200">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="professional portrait of a healthcare worker wearing blue scrubs in a bright clinic setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZh82-MiQXypUTSzk1Zv6MilKiH9M1qVWLCWXlX22MuwpjMLH0I6rjozMhIZzlVcF67SbEM-KGO6k5ZP9GV3PV6rZCRNLKyA9rD_e2yyML9aMpVLbBGe_4u6Llr_FNdV-LuZszbLnCqiI-CrqQhhxnjV_ZTqjjC713TDH8EnECh0mCwxS5oIYqZ1h8-Oc7mcetBv0fuaoM_VICZjow4I59BvcG7XDU6R7_NuGssqqQbkaxHbrBZ3vQfewawZJmiVCvxl1HEsUJGv3q"/>
+</div>
+<span class="font-medium text-slate-700">Sarah Jenkins, RN</span>
+</div>
+</div>
+</header>
+<aside class="fixed left-0 top-0 h-full w-64 border-r border-slate-200 z-40 bg-slate-50 font-['Inter'] font-medium text-sm flex flex-col pt-20 pb-6">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+<div class="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center text-white font-black">OC</div>
+<div>
+<div class="text-slate-900 font-bold leading-tight">Outpatient Center</div>
+<div class="text-slate-500 text-xs">Main Wing</div>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="bg-blue-50 text-blue-800 border-r-4 border-blue-700 flex items-center px-4 py-3 gap-3 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_view_week">calendar_view_week</span>
+                Schedule Grid
+            </a>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="pending_actions">pending_actions</span>
+                Requests
+            </a>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                Staff Directory
+            </a>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+                Analytics
+            </a>
+</nav>
+<div class="mt-auto px-4 space-y-1">
+<button class="w-full bg-blue-900 text-white py-3 px-4 rounded-lg font-bold flex items-center justify-center gap-2 mb-6 hover:bg-blue-800 transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                New Shift
+            </button>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+<a class="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Sign Out
+            </a>
+</div>
+</aside>
+<main class="ml-64 pt-24 px-8 pb-12">
+<header class="mb-10">
+<h1 class="font-h1 text-h1 text-on-surface">Staff Dashboard</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-2">Welcome back, Sarah. Here's your overview for today.</p>
+</header>
+<div class="grid grid-cols-12 gap-6">
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<section class="bg-primary text-on-primary rounded-xl p-8 shadow-sm relative overflow-hidden group">
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-6">
+<span class="bg-primary-container text-on-primary-container px-3 py-1 rounded-full text-label-sm font-label-sm">UPCOMING SHIFT</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<h2 class="font-h2 text-h2 mb-1">Morning Shift - Ward A</h2>
+<p class="text-primary-fixed-dim font-body-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="calendar_today">calendar_today</span>
+                                    Tomorrow, Wednesday Oct 25
+                                </p>
+</div>
+<div class="text-right">
+<div class="text-4xl font-extrabold tracking-tight">07:00 - 15:00</div>
+<div class="text-primary-fixed-dim font-medium">8 Hours Total</div>
+</div>
+</div>
+<div class="mt-8 pt-8 border-t border-white/10 flex gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed-dim" data-icon="person">person</span>
+<span class="text-sm">Manager: David Miller</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed-dim" data-icon="location_on">location_on</span>
+<span class="text-sm">Level 4, North Wing</span>
+</div>
+</div>
+</div>
+<div class="absolute right-0 bottom-0 translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors"></div>
+</section>
+<section class="bg-white border border-surface-border rounded-xl shadow-sm">
+<div class="p-6 border-b border-surface-border flex items-center justify-between">
+<h3 class="font-h3 text-h3">Recent Requests</h3>
+<a class="text-primary font-semibold text-sm hover:underline" href="#">View All</a>
+</div>
+<div class="divide-y divide-surface-border">
+<div class="p-6 flex items-center justify-between hover:bg-surface-background transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined" data-icon="flight_takeoff">flight_takeoff</span>
+</div>
+<div>
+<div class="font-medium text-on-surface">Annual Leave</div>
+<div class="text-sm text-on-surface-variant">Nov 12 - Nov 15 • 4 Days</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="bg-green-100 text-status-approved px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Approved</span>
+<span class="material-symbols-outlined text-outline cursor-pointer" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<div class="p-6 flex items-center justify-between hover:bg-surface-background transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined" data-icon="published_with_changes">published_with_changes</span>
+</div>
+<div>
+<div class="font-medium text-on-surface">Shift Swap Request</div>
+<div class="text-sm text-on-surface-variant">Friday Oct 27 • Evening for Night</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="bg-yellow-100 text-status-pending px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Pending</span>
+<span class="material-symbols-outlined text-outline cursor-pointer" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<div class="p-6 flex items-center justify-between hover:bg-surface-background transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+<span class="material-symbols-outlined" data-icon="medical_services">medical_services</span>
+</div>
+<div>
+<div class="font-medium text-on-surface">Personal Day</div>
+<div class="text-sm text-on-surface-variant">Oct 30 • 1 Day</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="bg-red-100 text-status-denied px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Denied</span>
+<span class="material-symbols-outlined text-outline cursor-pointer" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<section class="bg-white border border-surface-border rounded-xl p-6 shadow-sm">
+<h3 class="font-h3 text-h3 mb-6">Time Off Balance</h3>
+<div class="space-y-6">
+<div class="relative">
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-semibold text-on-surface-variant">Annual Leave</span>
+<span class="text-lg font-bold text-on-surface">18 / 25 <span class="text-xs font-normal text-slate-400">days left</span></span>
+</div>
+<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-blue-700 rounded-full" style="width: 72%"></div>
+</div>
+</div>
+<div class="relative">
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-semibold text-on-surface-variant">Sick Leave</span>
+<span class="text-lg font-bold text-on-surface">8 / 10 <span class="text-xs font-normal text-slate-400">days left</span></span>
+</div>
+<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-teal-600 rounded-full" style="width: 80%"></div>
+</div>
+</div>
+<div class="relative">
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-semibold text-on-surface-variant">Training Days</span>
+<span class="text-lg font-bold text-on-surface">2 / 5 <span class="text-xs font-normal text-slate-400">days left</span></span>
+</div>
+<div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-container rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 border border-secondary text-secondary font-bold rounded-lg hover:bg-secondary-container transition-colors">
+                        Request Time Off
+                    </button>
+</section>
+<section class="bg-white border border-surface-border rounded-xl overflow-hidden shadow-sm">
+<div class="p-6 border-b border-surface-border">
+<h3 class="font-h3 text-h3">Operational Memo</h3>
+</div>
+<div class="p-0">
+<div class="h-48 relative">
+<img alt="Hospital Hallway" class="w-full h-full object-cover" data-alt="clean modern hospital corridor with soft blue lighting and clinical equipment in the background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAV7PhLrZYeRveeTZQ6CfVEjn_Q3JgOXImAQfS4tTwZfEAKHyLVzLOjaA-clTBH3S0Uxan3RFcRcyOu_P3jzh6pkNbo6FylsAzf0PEuu8CvpUrW9NERg1KdiajKZQW0yDvWfcfVCgurYNH6Ls4niqgFvIRTfRtek-GTfK3KV3LgxUCi8Xz8q2X8qXwPyqia0V9OxR10TiZMqit92Q39piAovw8D1caMaSrho6bPloPVk0NibuHpPVXUe7Ef8H8dlnz-VpBlYSwA31_H"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="absolute bottom-4 left-4 right-4 text-white">
+<div class="text-xs font-bold uppercase tracking-widest text-blue-300 mb-1">Clinic Updates</div>
+<div class="text-sm font-medium leading-tight">North Wing construction starting Monday. Please use Service Entrance B.</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="info">info</span>
+</div>
+<p class="text-xs text-on-surface-variant italic">Last updated 2 hours ago by Administration</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<footer class="ml-64 p-8 border-t border-slate-200 text-slate-500 text-sm flex justify-between items-center bg-white">
+<div>© 2023 ClickShift Operations. All rights reserved.</div>
+<div class="flex gap-6">
+<a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-primary transition-colors" href="#">Help Center</a>
+<a class="hover:text-primary transition-colors" href="#">Support</a>
+</div>
+</footer>
+</body></html>

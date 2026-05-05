@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Staff Personal Schedule - ClickShift</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .grid-cell-min-h {
+            min-height: 120px;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary": "#ffffff",
+                      "surface-tint": "#1261a3",
+                      "on-surface": "#191c20",
+                      "surface-variant": "#e1e2e8",
+                      "on-secondary-fixed-variant": "#004f4f",
+                      "surface-bright": "#f8f9ff",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "tertiary": "#6a3100",
+                      "status-approved": "#2E7D32",
+                      "outline": "#727781",
+                      "status-pending": "#F9A825",
+                      "surface-container-low": "#f2f3f9",
+                      "outline-variant": "#c1c7d2",
+                      "surface-background": "#F8FAFC",
+                      "on-error": "#ffffff",
+                      "on-surface-variant": "#414750",
+                      "on-primary-container": "#afd1ff",
+                      "on-secondary-container": "#007070",
+                      "tertiary-fixed": "#ffdcc7",
+                      "on-tertiary-fixed": "#311300",
+                      "secondary-fixed": "#8cf3f3",
+                      "on-primary-fixed-variant": "#00487f",
+                      "on-tertiary-container": "#ffc29c",
+                      "on-tertiary-fixed-variant": "#733600",
+                      "primary": "#004275",
+                      "status-off": "#757575",
+                      "surface-container-highest": "#e1e2e8",
+                      "secondary-container": "#8cf3f3",
+                      "surface-container": "#ecedf4",
+                      "on-tertiary": "#ffffff",
+                      "inverse-on-surface": "#eff0f7",
+                      "surface-container-high": "#e7e8ee",
+                      "surface-border": "#E2E8F0",
+                      "primary-container": "#005a9c",
+                      "inverse-primary": "#a1c9ff",
+                      "status-denied": "#D32F2F",
+                      "surface": "#f8f9ff",
+                      "on-secondary-fixed": "#002020",
+                      "tertiary-fixed-dim": "#ffb787",
+                      "on-error-container": "#93000a",
+                      "inverse-surface": "#2e3035",
+                      "primary-fixed": "#d2e4ff",
+                      "surface-dim": "#d8dae0",
+                      "tertiary-container": "#8d4401",
+                      "secondary-fixed-dim": "#6fd7d6",
+                      "primary-fixed-dim": "#a1c9ff",
+                      "on-background": "#191c20",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#006a6a",
+                      "on-primary-fixed": "#001c37",
+                      "on-secondary": "#ffffff",
+                      "background": "#f8f9ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "row-height-dense": "40px",
+                      "grid-gutter": "1px",
+                      "container-padding": "24px",
+                      "sidebar-width": "260px",
+                      "base": "8px"
+              },
+              "fontFamily": {
+                      "h2": ["Inter"],
+                      "body-md": ["Inter"],
+                      "h3": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "h1": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "data-tabular": ["Inter"]
+              },
+              "fontSize": {
+                      "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "h3": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "data-tabular": ["13px", {"lineHeight": "1.2", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-surface-background font-body-md text-on-background">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-slate-900 fixed top-0 w-full h-16 z-50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 w-full">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tight text-blue-900 dark:text-blue-100 font-['Inter']">ClickShift</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-blue-700 dark:text-blue-400 font-semibold border-b-2 border-blue-700 py-5 font-['Inter'] text-sm tracking-tight" href="staff_schedule.html">Schedule Grid</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-['Inter'] text-sm tracking-tight" href="#">Requests</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors font-['Inter'] text-sm tracking-tight" href="#">Staff Directory</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<div class="flex items-center gap-2 pl-4 border-l border-slate-200">
+<img alt="User profile" class="w-8 h-8 rounded-full object-cover border border-slate-200" data-alt="Professional headshot of a healthcare worker in blue scrubs with a friendly expression, soft hospital lighting background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRUUWNLBVBIMV1i5P5IRi6Fv4gi5Wov_CFgnQfz0H94nd-4oFs6zbJAjaQiiGrUnWjtVzqS0Cn1ZQsZxCCfpRyt4oE4R5fwo1trNNHi1-JS5Q_vbjQrWgDxvWRiRRjcR3UqzMVQl8gWAAK7m83lED2U9GXbmb0uz5qtUROdm3JdzpzKDTjDKvRgLuc8CzSbKXbwceG489Xils_rcBIlsI8Rsgq7w-N9BhejlDOVtZvf-F0tXqwxGgAQg31HwLAZ3ZnRXExi3SfNVv8"/>
+<span class="font-medium text-sm text-slate-700">Sarah Jenkins</span>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="bg-slate-50 dark:bg-slate-950 fixed left-0 top-0 h-full w-64 border-r border-slate-200 dark:border-slate-800 z-40 hidden md:flex flex-col pt-20 pb-6">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="local_hospital">local_hospital</span>
+</div>
+<div>
+<h2 class="text-blue-900 dark:text-white font-black text-sm">Outpatient Center</h2>
+<p class="text-xs text-slate-500">Main Wing</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-blue-700 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span> Dashboard
+            </a>
+<a class="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border-r-4 border-blue-700 flex items-center px-4 py-3 gap-3 font-['Inter'] font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_view_week">calendar_view_week</span> Schedule Grid
+            </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-blue-700 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="pending_actions">pending_actions</span> Requests
+            </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-blue-700 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span> Staff Directory
+            </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-blue-700 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span> Analytics
+            </a>
+</nav>
+<div class="px-6 mb-4">
+<button class="w-full bg-primary text-on-primary py-2.5 rounded-lg font-bold text-sm shadow-sm active:scale-95 transition-all">
+                New Request
+            </button>
+</div>
+<div class="border-t border-slate-200 pt-4 px-3 space-y-1">
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span> Settings
+            </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all font-['Inter'] font-medium text-sm rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span> Sign Out
+            </a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="md:ml-64 pt-24 px-6 pb-12">
+<div class="max-w-7xl mx-auto">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+<div>
+<h1 class="font-h1 text-h1 text-primary mb-1">My Schedule</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage your shifts and time-off requests for October 2023.</p>
+</div>
+<div class="flex items-center bg-white border border-surface-border rounded-lg p-1 shadow-sm">
+<button class="p-2 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+</button>
+<span class="px-4 font-h3 text-h3">October 2023</span>
+<button class="p-2 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Dashboard Summary Bento -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+<div class="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
+<div class="bg-secondary-container text-on-secondary-container p-3 rounded-lg">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase">Total Shifts</p>
+<p class="font-h2 text-h2">18</p>
+</div>
+</div>
+<div class="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
+<div class="bg-green-100 text-status-approved p-3 rounded-lg">
+<span class="material-symbols-outlined" data-icon="event_available" style="font-variation-settings: 'FILL' 1;">event_available</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase">Approved PTO</p>
+<p class="font-h2 text-h2">3 Days</p>
+</div>
+</div>
+<div class="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
+<div class="bg-amber-100 text-status-pending p-3 rounded-lg">
+<span class="material-symbols-outlined" data-icon="hourglass_empty">hourglass_empty</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase">Pending Requests</p>
+<p class="font-h2 text-h2">1</p>
+</div>
+</div>
+<div class="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
+<div class="bg-primary text-on-primary p-3 rounded-lg">
+<span class="material-symbols-outlined" data-icon="query_builder">query_builder</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase">Total Hours</p>
+<p class="font-h2 text-h2">144h</p>
+</div>
+</div>
+</div>
+<!-- Calendar Section -->
+<div class="bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden">
+<!-- Days of Week Header -->
+<div class="grid grid-cols-7 border-b border-surface-border bg-surface-container-lowest">
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">SUN</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">MON</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">TUE</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">WED</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">THU</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant border-r border-surface-border">FRI</div>
+<div class="py-4 text-center font-label-sm text-on-surface-variant">SAT</div>
+</div>
+<!-- Grid Days -->
+<div class="grid grid-cols-7 grid-rows-5 border-b border-surface-border">
+<!-- Week 1 -->
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border bg-surface-container-low opacity-50">
+<span class="text-sm font-data-tabular">26</span>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border bg-surface-container-low opacity-50">
+<span class="text-sm font-data-tabular">27</span>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border bg-surface-container-low opacity-50">
+<span class="text-sm font-data-tabular">28</span>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border bg-surface-container-low opacity-50">
+<span class="text-sm font-data-tabular">29</span>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border bg-surface-container-low opacity-50">
+<span class="text-sm font-data-tabular">30</span>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">1</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>AM Shift</p>
+<p class="opacity-80">07:00 - 15:00</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-b border-surface-border">
+<span class="text-sm font-data-tabular">2</span>
+<div class="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
+<p>Off</p>
+</div>
+</div>
+<!-- Week 2 -->
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">3</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>PM Shift</p>
+<p class="opacity-80">15:00 - 23:00</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">4</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>PM Shift</p>
+<p class="opacity-80">15:00 - 23:00</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">5</span>
+<div class="mt-2 bg-green-50 text-status-approved p-2 rounded text-xs font-medium border border-green-200">
+<p>PTO - Vacation</p>
+<p class="opacity-80">Approved</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">6</span>
+<div class="mt-2 bg-green-50 text-status-approved p-2 rounded text-xs font-medium border border-green-200">
+<p>PTO - Vacation</p>
+<p class="opacity-80">Approved</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">7</span>
+<div class="mt-2 bg-green-50 text-status-approved p-2 rounded text-xs font-medium border border-green-200">
+<p>PTO - Vacation</p>
+<p class="opacity-80">Approved</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">8</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>Full Shift</p>
+<p class="opacity-80">07:00 - 19:00</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-b border-surface-border bg-surface-container-lowest">
+<span class="text-sm font-data-tabular">9</span>
+<div class="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
+<p>Off</p>
+</div>
+</div>
+<!-- Week 3 -->
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">10</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>AM Shift</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border ring-2 ring-primary ring-inset">
+<span class="text-sm font-data-tabular font-bold text-primary">11</span>
+<div class="mt-1 flex items-center gap-1 text-[10px] text-primary font-bold uppercase mb-1">
+<span class="w-1.5 h-1.5 bg-primary rounded-full"></span> Today
+                        </div>
+<div class="bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>AM Shift</p>
+<p class="opacity-80">07:00 - 15:00</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">12</span>
+<div class="mt-2 bg-amber-50 text-status-pending p-2 rounded text-xs font-medium border border-amber-200">
+<p>Unpaid Leave</p>
+<p class="opacity-80">Pending</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">13</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>AM Shift</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">14</span>
+<div class="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
+<p>AM Shift</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-r border-b border-surface-border">
+<span class="text-sm font-data-tabular">15</span>
+<div class="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
+<p>Off</p>
+</div>
+</div>
+<div class="grid-cell-min-h p-3 border-b border-surface-border">
+<span class="text-sm font-data-tabular">16</span>
+<div class="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
+<p>Off</p>
+</div>
+</div>
+<!-- Additional weeks placeholder... -->
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">17</span></div>
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">18</span></div>
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">19</span></div>
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">20</span></div>
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">21</span></div>
+<div class="grid-cell-min-h p-3 border-r border-surface-border"><span class="text-sm font-data-tabular">22</span></div>
+<div class="grid-cell-min-h p-3"><span class="text-sm font-data-tabular">23</span></div>
+</div>
+</div>
+<!-- Legend and Notes Section -->
+<div class="mt-6 flex flex-col md:flex-row gap-6">
+<div class="bg-white p-6 rounded-xl border border-surface-border flex-1">
+<h3 class="font-h3 text-h3 mb-4">Calendar Legend</h3>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="flex items-center gap-3">
+<div class="w-4 h-4 rounded bg-on-secondary-container"></div>
+<span class="text-body-md">Working Shift</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-4 h-4 rounded bg-green-50 border border-green-200"></div>
+<span class="text-body-md">Approved PTO</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-4 h-4 rounded bg-amber-50 border border-amber-200"></div>
+<span class="text-body-md">Pending Request</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-4 h-4 rounded bg-slate-100 border border-slate-200"></div>
+<span class="text-body-md">Scheduled Off</span>
+</div>
+</div>
+</div>
+<div class="bg-primary-container text-white p-6 rounded-xl md:w-80 flex flex-col justify-between">
+<div>
+<h3 class="font-h3 text-h3 mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="lightbulb">lightbulb</span> 
+                            Pro-Tip
+                        </h3>
+<p class="text-body-md opacity-90 leading-snug">Click on any date to swap shifts with colleagues or request a schedule adjustment.</p>
+</div>
+<button class="mt-4 bg-white text-primary px-4 py-2 rounded-lg font-bold text-sm">View Swap Board</button>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB (Suppressed on detail pages, but kept here for dashboard relevance) -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined" data-icon="add" style="font-variation-settings: 'wght' 600;">add</span>
+</button>
+</body></html>

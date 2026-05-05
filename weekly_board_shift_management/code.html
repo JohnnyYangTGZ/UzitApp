@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ClickShift | Staffing Board</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#1261a3",
+                        "on-surface": "#191c20",
+                        "surface-variant": "#e1e2e8",
+                        "on-secondary-fixed-variant": "#004f4f",
+                        "surface-bright": "#f8f9ff",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "tertiary": "#6a3100",
+                        "status-approved": "#2E7D32",
+                        "outline": "#727781",
+                        "status-pending": "#F9A825",
+                        "surface-container-low": "#f2f3f9",
+                        "outline-variant": "#c1c7d2",
+                        "surface-background": "#F8FAFC",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#414750",
+                        "on-primary-container": "#afd1ff",
+                        "on-secondary-container": "#007070",
+                        "tertiary-fixed": "#ffdcc7",
+                        "on-tertiary-fixed": "#311300",
+                        "secondary-fixed": "#8cf3f3",
+                        "on-primary-fixed-variant": "#00487f",
+                        "on-tertiary-container": "#ffc29c",
+                        "on-tertiary-fixed-variant": "#733600",
+                        "primary": "#004275",
+                        "status-off": "#757575",
+                        "surface-container-highest": "#e1e2e8",
+                        "secondary-container": "#8cf3f3",
+                        "surface-container": "#ecedf4",
+                        "on-tertiary": "#ffffff",
+                        "inverse-on-surface": "#eff0f7",
+                        "surface-container-high": "#e7e8ee",
+                        "surface-border": "#E2E8F0",
+                        "primary-container": "#005a9c",
+                        "inverse-primary": "#a1c9ff",
+                        "status-denied": "#D32F2F",
+                        "surface": "#f8f9ff",
+                        "on-secondary-fixed": "#002020",
+                        "tertiary-fixed-dim": "#ffb787",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#2e3035",
+                        "primary-fixed": "#d2e4ff",
+                        "surface-dim": "#d8dae0",
+                        "tertiary-container": "#8d4401",
+                        "secondary-fixed-dim": "#6fd7d6",
+                        "primary-fixed-dim": "#a1c9ff",
+                        "on-background": "#191c20",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#006a6a",
+                        "on-primary-fixed": "#001c37",
+                        "on-secondary": "#ffffff",
+                        "background": "#f8f9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "row-height-dense": "40px",
+                        "grid-gutter": "1px",
+                        "container-padding": "24px",
+                        "sidebar-width": "260px",
+                        "base": "8px"
+                    },
+                    "fontFamily": {
+                        "h2": ["Inter"], "body-md": ["Inter"], "h3": ["Inter"], "body-lg": ["Inter"], "h1": ["Inter"], "label-sm": ["Inter"], "data-tabular": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "h3": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "data-tabular": ["13px", {"lineHeight": "1.2", "fontWeight": "500"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .sticky-col { position: sticky; left: 0; z-index: 10; }
+        .grid-line { border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        .sick-call-pattern {
+            background-image: repeating-linear-gradient(45deg, #fee2e2 0, #fee2e2 5px, #fecaca 5px, #fecaca 10px);
+        }
+    </style>
+</head>
+<body class="bg-surface-background font-body-md text-on-surface">
+<!-- TopAppBar Shell -->
+<header class="bg-white dark:bg-slate-900 fixed top-0 w-full h-16 z-50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6">
+<div class="flex items-center gap-8">
+<h1 class="text-xl font-bold tracking-tight text-blue-900 dark:text-blue-100 font-h1">ClickShift</h1>
+<nav class="hidden md:flex gap-6">
+<a class="text-blue-700 dark:text-blue-400 font-semibold border-b-2 border-blue-700 font-body-md py-5" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-body-md py-5 transition-colors" href="#">Staff</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-body-md py-5 transition-colors" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-xl text-body-md w-64 focus:ring-2 focus:ring-primary" placeholder="Search staff..." type="text"/>
+</div>
+<button class="p-2 hover:bg-slate-50 rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200">
+<div class="text-right">
+<p class="text-label-sm text-on-surface font-bold">Admin User</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest">Manager</p>
+</div>
+<img alt="User profile" class="w-8 h-8 rounded-full object-cover border border-outline-variant" data-alt="Professional headshot of a hospital administrator in a business suit, neutral background, clean corporate photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0d9aY7dQWSZBPb34VOs7x2MAB7uXdhcT0_9h9eQJoP-C99bE_FloTZvCMwwoYyPRSUmse4Nx8f_2YdOQZe9KOEsxRAiTYRVp1qm0rFDprQUgttld-q3ewNYWetIBAWmx3srjEHwRAyXzd3xpoxJVA8hgRNbLbwz2VtySUtCBRkpYR6MGXIZXaQCEMI7T6XV9UzN89G0Yr9Pu9cgsuUQ5xJBVlxjZqRoMQTf2bRo61gJfmEgK3Tq8Q0IJUMitC6hBwk3uAkURvNIgh"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar Shell -->
+<aside class="bg-slate-50 dark:bg-slate-950 fixed left-0 top-0 h-full w-64 border-r border-slate-200 dark:border-slate-800 z-40 flex flex-col pt-20 pb-6">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 p-3 bg-white rounded-xl border border-surface-border">
+<img alt="Clinic Logo" class="w-10 h-10 rounded-lg object-cover" data-alt="Modern medical clinic logo with a blue cross icon, minimalist branding on white background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4pEr_aoura-B0jPZP-VKrUaB8shmziGnveKv5uZdH4bKyKQdWM0cWDFwOextWDZHUczl85UEy1t5lNRK8zorGQ96P1TVXG2PFhewr4yiBg5xYC4Zb3JzdoJk-2Am80hzYsfOTR6rRYxuJrU-bHGN5z7VGJLEzgsE3SNVoNmGhfF17YTjZDAZ7CGkOW9rtU6wJIUIathhlT9u7n2hVzIq2mTpiVbU57uaJgxjiu8mt0yijzDqRkisNZWoJ2MtPKrfsXp7o4fDq7-mc"/>
+<div>
+<h2 class="text-sm font-bold text-blue-900 leading-tight">Outpatient Center</h2>
+<p class="text-[10px] text-slate-500 uppercase font-semibold">Main Wing</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-4">
+<a class="flex items-center px-4 py-3 gap-3 text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition-all rounded-lg font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center px-4 py-3 gap-3 bg-blue-50 text-blue-800 border-r-4 border-blue-700 font-body-md rounded-l-lg" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_view_week">calendar_view_week</span>
+<span>Schedule Grid</span>
+</a>
+<a class="flex items-center px-4 py-3 gap-3 text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition-all rounded-lg font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="pending_actions">pending_actions</span>
+<span>Requests</span>
+<span class="ml-auto bg-error text-white text-[10px] px-1.5 py-0.5 rounded-full">4</span>
+</a>
+<a class="flex items-center px-4 py-3 gap-3 text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition-all rounded-lg font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span>Staff Directory</span>
+</a>
+<a class="flex items-center px-4 py-3 gap-3 text-slate-600 hover:bg-slate-100 hover:text-blue-700 transition-all rounded-lg font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span>Analytics</span>
+</a>
+</nav>
+<div class="mt-auto px-4 space-y-1">
+<button class="w-full bg-primary text-white py-3 rounded-xl font-bold text-sm mb-4 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/10 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+            New Shift
+        </button>
+<a class="flex items-center px-4 py-3 gap-3 text-slate-500 hover:text-slate-900 transition-all font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center px-4 py-3 gap-3 text-slate-500 hover:text-slate-900 transition-all font-body-md" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span>Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 pt-20 p-8 min-h-screen">
+<!-- Header & Stats -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+<div>
+<nav class="flex items-center gap-2 text-on-surface-variant text-label-sm mb-2">
+<span>Operational Board</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary">Weekly View</span>
+</nav>
+<h1 class="font-h1 text-h1 text-on-surface">Weekly Clinic Staffing Board</h1>
+<p class="text-body-md text-on-surface-variant mt-1">Oct 23 - Oct 29, 2023 • North Wing Care Team</p>
+</div>
+<div class="flex gap-3">
+<div class="bg-white p-4 rounded-xl border border-surface-border flex items-center gap-4 shadow-sm">
+<div class="w-10 h-10 rounded-full bg-status-approved/10 flex items-center justify-center text-status-approved">
+<span class="material-symbols-outlined">how_to_reg</span>
+</div>
+<div>
+<p class="text-label-sm text-on-surface-variant">Coverage</p>
+<p class="text-h3 font-h3 text-on-surface">94%</p>
+</div>
+</div>
+<div class="bg-white p-4 rounded-xl border border-surface-border flex items-center gap-4 shadow-sm">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined">warning</span>
+</div>
+<div>
+<p class="text-label-sm text-on-surface-variant">Gaps</p>
+<p class="text-h3 font-h3 text-on-surface">3</p>
+</div>
+</div>
+<div class="bg-white p-4 rounded-xl border border-surface-border flex items-center gap-4 shadow-sm">
+<div class="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">history</span>
+</div>
+<div>
+<p class="text-label-sm text-on-surface-variant">Pending</p>
+<p class="text-h3 font-h3 text-on-surface">12</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Scheduling Grid Container -->
+<div class="bg-white rounded-xl border border-surface-border shadow-sm overflow-visible flex flex-col">
+<!-- Grid Tools -->
+<div class="p-4 border-b border-surface-border flex items-center justify-between bg-surface-bright">
+<div class="flex gap-2">
+<div class="flex bg-surface-container rounded-lg p-1">
+<button class="px-4 py-1.5 rounded-md text-sm font-semibold bg-white shadow-sm text-primary">Week</button>
+<button class="px-4 py-1.5 rounded-md text-sm font-semibold text-on-surface-variant hover:text-on-surface">Month</button>
+</div>
+<div class="flex border border-surface-border rounded-lg overflow-hidden">
+<button class="p-2 bg-white hover:bg-slate-50 border-r border-surface-border"><span class="material-symbols-outlined text-lg">chevron_left</span></button>
+<button class="px-4 py-1 bg-white hover:bg-slate-50 text-sm font-medium">Today</button>
+<button class="p-2 bg-white hover:bg-slate-50 border-l border-surface-border"><span class="material-symbols-outlined text-lg">chevron_right</span></button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
+<span class="w-3 h-3 rounded bg-blue-700"></span> AM Shift
+                    <span class="w-3 h-3 rounded bg-blue-400"></span> PM Shift
+                    <span class="w-3 h-3 rounded bg-status-approved/20 border border-status-approved"></span> PTO
+                    <span class="w-3 h-3 rounded sick-call-pattern border border-red-300"></span> Sick Call
+                </div>
+<button class="flex items-center gap-2 text-sm font-semibold text-primary px-4 py-2 hover:bg-primary/5 rounded-lg">
+<span class="material-symbols-outlined text-lg">filter_list</span> Filter
+                </button>
+<button class="flex items-center gap-2 text-sm font-semibold text-white bg-secondary px-4 py-2 rounded-lg hover:opacity-90">
+<span class="material-symbols-outlined text-lg">publish</span> Export
+                </button>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto overflow-y-auto max-h-[600px] hide-scrollbar">
+<table class="w-full border-collapse table-fixed min-w-[1000px]">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="sticky-col top-0 w-64 bg-surface-container-low z-30 p-4 text-left border-b border-r border-surface-border">
+<span class="text-label-sm uppercase text-on-surface-variant">Staff Member</span>
+</th>
+<!-- Days -->
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20">
+<p class="text-label-sm text-on-surface-variant">MON</p>
+<p class="text-h3">23</p>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20">
+<p class="text-label-sm text-on-surface-variant">TUE</p>
+<p class="text-h3">24</p>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20">
+<p class="text-label-sm text-on-surface-variant">WED</p>
+<p class="text-h3">25</p>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20">
+<p class="text-label-sm text-on-surface-variant">THU</p>
+<p class="text-h3 text-error">26</p>
+<span class="text-[10px] text-error font-bold uppercase">Gap</span>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20">
+<p class="text-label-sm text-on-surface-variant">FRI</p>
+<p class="text-h3">27</p>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20 bg-slate-100">
+<p class="text-label-sm text-slate-400">SAT</p>
+<p class="text-h3 text-slate-400">28</p>
+</th>
+<th class="sticky top-0 p-4 border-b grid-line bg-surface-container-low z-20 bg-slate-100">
+<p class="text-label-sm text-slate-400">SUN</p>
+<p class="text-h3 text-slate-400">29</p>
+</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-border">
+<!-- Employee Row 1 -->
+<tr class="group">
+<td class="sticky-col bg-white group-hover:bg-slate-50 border-r border-surface-border p-4 z-10">
+<div class="flex items-center gap-3">
+<div class="relative">
+<img alt="Staff" class="w-10 h-10 rounded-full object-cover" data-alt="Close-up of a female doctor in her 30s with a warm smile, wearing a white medical coat, bright clinic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAt0otLDJbcuJ4eS3WOn4xldzM4Z2eG9R0Rymns43VqesuuH1mc-SWNbRrHjWNU8PnW-y4P2YPr2ymXC_kvANYCuykbSr5Z7J-2laut8S6VcRx7hyvdewRaHKpvHxdwH5N2-yUutEoFUXHSMoKr00swfYbo_ZTU6TcIacvENxCw1O7Dn52foVDkUl2DWUcYlhVtGfZYLU03SuLGcOONSxhiG2mnEAm1h26ZR1cY-F5neeGCf6gLw4ZRqY2tzwSUAAfksXVu9Y2fxCgZ"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">Dr. Sarah Jenkins</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Sr. Physician</p>
+</div>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5 group-hover:bg-blue-700/10 transition-colors relative overflow-visible">
+<div class="relative group/shift">
+<button class="w-full text-left bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all">
+<p>AM SHIFT</p>
+<p class="opacity-80 text-[9px]">07:00 - 15:00</p>
+</button>
+<!-- Quick Actions Dropdown Overlay -->
+<div class="absolute top-full left-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-surface-border z-50 py-1 hidden group-hover/shift:block">
+<button class="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center gap-2 text-error">
+<span class="material-symbols-outlined text-sm">medical_services</span>
+                                    Report Sick
+                                </button>
+<button class="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center gap-2 text-on-surface">
+<span class="material-symbols-outlined text-sm">swap_horiz</span>
+                                    Reassign...
+                                </button>
+<button class="w-full px-3 py-2 text-left text-xs font-semibold hover:bg-slate-50 flex items-center gap-2 text-slate-500">
+<span class="material-symbols-outlined text-sm">cancel</span>
+                                    Cancel Shift
+                                </button>
+</div>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">15:00 - 23:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">07:00 - 15:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-status-approved/5">
+<div class="border-2 border-dashed border-status-approved/30 bg-status-approved/5 rounded p-2 text-[11px] font-bold text-status-approved text-center">
+<span class="material-symbols-outlined text-sm mb-1 block">beach_access</span>
+                            APPROVED PTO
+                        </div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">07:00 - 15:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-slate-50"></td>
+<td class="p-2 grid-line bg-slate-50"></td>
+</tr>
+<!-- Employee Row 2 -->
+<tr class="group">
+<td class="sticky-col bg-white group-hover:bg-slate-50 border-r border-surface-border p-4 z-10">
+<div class="flex items-center gap-3">
+<img alt="Staff" class="w-10 h-10 rounded-full object-cover" data-alt="Male healthcare professional in blue scrubs, friendly expression, blurred hospital corridor in background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsHMgl5xnhKfLIb5WkMGPUdVPwpYgyhBkTdDcpP96K1AOjYIXkUWJdLu1zBCNJ0JrfgTbBlrSYLSaVtWezgbfA5Bw7qJtscnG2VIfV1NpzMULQDndWiopdyhxRfNy9mnswH1fZZ5kIkoSlB2ZB4HSGEjmnOfGm8wpAcUL9ai3LLgLmIhcDhmp_i9WYCbILJNlS5QAAShBB4W7GEjhljdNp8uVWeHdccRYiKJteYO_co4luu4WAnveKXDQkocUOlEBRXpMNruSw2LHZ"/>
+<div>
+<p class="text-sm font-bold text-on-surface">Mark Roberts, RN</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Head Nurse</p>
+</div>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">15:00 - 23:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">07:00 - 15:00</p>
+</div>
+</td>
+<td class="p-2 grid-line">
+<div class="sick-call-pattern border border-red-200 text-error rounded p-2 text-[11px] font-bold shadow-sm flex flex-col items-center justify-center text-center h-full">
+<span class="material-symbols-outlined text-sm mb-1">sick</span>
+<p>SICK CALL</p>
+<p class="text-[9px] opacity-70">Reported 06:15</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-error-container/20">
+<button class="w-full h-full border-2 border-dashed border-error/20 rounded flex flex-col items-center justify-center text-error hover:bg-error/5 transition-colors">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+<span class="text-[9px] font-black">FILL GAP</span>
+</button>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">15:00 - 23:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-slate-50">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>ON CALL</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-slate-50"></td>
+</tr>
+<!-- Employee Row 3 -->
+<tr class="group">
+<td class="sticky-col bg-white group-hover:bg-slate-50 border-r border-surface-border p-4 z-10">
+<div class="flex items-center gap-3">
+<img alt="Staff" class="w-10 h-10 rounded-full object-cover" data-alt="Female nurse with stethoscope around neck, professional and focused look, clinical setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAoRWpglczloxiGLa06DvJrvqvkHwBXSnIhm9SN4qIb-Xh4wMis4ZMX2GMvCU9s_2P91RDMvPE88y7slrKlnNphBgZBPLhuHA794fZWsu_mnaobkq3lmY7MNvWOpjuC6SZelBQDjLqedV4TWZojuDVDB7CwBOUq5WIlH-yZGTG3NVZtzM7jaYTjg_80KT8gbd1mJa-RhF9pChQtPKtA9K6LXsv8KTGzTcnsapo2MmA-r59X5AdMo6PDeSQUbiBPgeQrwliowymFM4tw"/>
+<div>
+<p class="text-sm font-bold text-on-surface">Elena Rodriguez</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Clinic Admin</p>
+</div>
+</div>
+</td>
+<td class="p-2 grid-line"></td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">08:00 - 16:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">08:00 - 16:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">08:00 - 16:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-700/5">
+<div class="bg-blue-700 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>AM SHIFT</p>
+<p class="opacity-80">08:00 - 16:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-slate-50"></td>
+<td class="p-2 grid-line bg-slate-50"></td>
+</tr>
+<!-- Employee Row 4 -->
+<tr class="group">
+<td class="sticky-col bg-white group-hover:bg-slate-50 border-r border-surface-border p-4 z-10">
+<div class="flex items-center gap-3">
+<img alt="Staff" class="w-10 h-10 rounded-full object-cover" data-alt="Young male nurse in teal scrubs, smiling, bright modern clinic background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt7_aVkg0fXwMXzk4Pbs_7lFyJrZM7Q-pH6RKaPl_ahd9KO1B2OhgZJP39Qu4J0tWS4fKgepAOonwG0-sCkztPCsujT-Ktu1xA2TYmIOSACRrzMJUvXHd1dk0w-SxEgw97IsIT7s4xJV62fS8pdmUdcF38KzC9TbkAKpv09lF2Eqfc2d86rlM425FsAPKg_auAFpwJJC-8ggthdHZKoOMCb6t476EXN4PHLww5BvqxnOVTWe8gdqW9YvuGZn5o47gEnKuFN_HZuYBI"/>
+<div>
+<p class="text-sm font-bold text-on-surface">David Chen</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-medium">Physiotherapist</p>
+</div>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">14:00 - 22:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-status-pending/10">
+<div class="bg-status-pending text-on-tertiary-fixed rounded p-2 text-[11px] font-bold shadow-sm relative overflow-hidden">
+<p>REQUEST</p>
+<p class="opacity-80">Pending Switch</p>
+<div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">14:00 - 22:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">14:00 - 22:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-blue-400/5">
+<div class="bg-blue-400 text-white rounded p-2 text-[11px] font-bold shadow-sm">
+<p>PM SHIFT</p>
+<p class="opacity-80">14:00 - 22:00</p>
+</div>
+</td>
+<td class="p-2 grid-line bg-slate-50"></td>
+<td class="p-2 grid-line bg-slate-50"></td>
+</tr>
+</tbody>
+<tfoot>
+<tr class="bg-surface-container-high font-bold text-[11px]">
+<td class="sticky-col bg-surface-container-high p-4 border-r border-surface-border">TOTAL STAFFING</td>
+<td class="p-4 text-center border-r border-surface-border">14/15</td>
+<td class="p-4 text-center border-r border-surface-border">15/15</td>
+<td class="p-4 text-center border-r border-surface-border">15/15</td>
+<td class="p-4 text-center border-r border-surface-border text-error">12/15</td>
+<td class="p-4 text-center border-r border-surface-border">14/15</td>
+<td class="p-4 text-center border-r border-surface-border">4/4</td>
+<td class="p-4 text-center">4/4</td>
+</tr>
+</tfoot>
+</table>
+</div>
+</div>
+<!-- Sidebar Details / Insights Asymmetric Layout -->
+<div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Coverage Insights -->
+<div class="lg:col-span-2 space-y-6">
+<div class="bg-white p-6 rounded-xl border border-surface-border shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-h3 text-h3 text-on-surface">Staffing Insights</h3>
+<span class="text-label-sm text-primary font-bold cursor-pointer">VIEW FULL REPORT</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="p-4 rounded-xl bg-surface-background border border-surface-border">
+<div class="flex items-center gap-3 mb-3">
+<span class="material-symbols-outlined text-status-pending">warning</span>
+<p class="text-sm font-bold">Thur Afternoon Gap</p>
+</div>
+<p class="text-body-md text-on-surface-variant mb-4">Coverage is 20% below threshold for General Practice wing on Oct 26.</p>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg">Auto-Fill</button>
+<button class="px-3 py-1.5 border border-outline-variant text-xs font-bold rounded-lg">Notify Float Pool</button>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-surface-background border border-surface-border">
+<div class="flex items-center gap-3 mb-3">
+<span class="material-symbols-outlined text-status-approved">verified</span>
+<p class="text-sm font-bold">Weekend Coverage</p>
+</div>
+<p class="text-body-md text-on-surface-variant mb-4">Weekend on-call rotations are finalized and confirmed for the next 4 weeks.</p>
+<button class="px-3 py-1.5 border border-outline-variant text-xs font-bold rounded-lg">View Rotation</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pending Requests Sidebar -->
+<div class="bg-white p-6 rounded-xl border border-surface-border shadow-sm">
+<h3 class="font-h3 text-h3 text-on-surface mb-6">Pending Approvals</h3>
+<div class="space-y-4">
+<div class="flex items-start gap-4 p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group">
+<img alt="Requester" class="w-10 h-10 rounded-lg object-cover" data-alt="Close-up of a healthcare worker's hands typing on a laptop, professional medical atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZtVC_Vd1Q0VlS2bEwaWHhQfO5B48PxoviU-pKqUZ8kwiMwxZRTvwpc6Rjsioc2DsWx9xqnn3Ylm8N6eIkEtsyYoOgG7WVjIr_Yg0JOzCX7vJWMrb74CB3rzXsQObAjyD4btGF-7GOOeFM8Mg4alGaJDIFRLB6LztACFAE62nGRVBSvyTzLViGu19dFDz9gkE7Yt3DxmlrvH-C9R8sLZD853VIFoZKbThya6pkPdbirVYnmDRaBW1kwtXCTs3B25o_IY2ltr1-3_yR"/>
+<div class="flex-1">
+<p class="text-sm font-bold text-on-surface">Shift Swap Request</p>
+<p class="text-[11px] text-on-surface-variant">L. Thompson ↔ J. Miller</p>
+<p class="text-[11px] font-bold text-status-pending mt-1">Oct 27, PM Shift</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</div>
+<div class="flex items-start gap-4 p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-lg bg-tertiary-fixed flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">event_busy</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold text-on-surface">New PTO Request</p>
+<p class="text-[11px] text-on-surface-variant">Robert Kim • 3 Days</p>
+<p class="text-[11px] font-bold text-primary mt-1">Nov 05 - Nov 08</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</div>
+<button class="w-full py-3 border-2 border-dashed border-outline-variant text-on-surface-variant text-sm font-bold rounded-xl hover:border-primary hover:text-primary transition-all">
+                    View All Requests (12)
+                </button>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB for quick actions -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined text-2xl">add</span>
+</button>
+</body></html>
