@@ -40,6 +40,13 @@ export default function AdminDashboard() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [currentDepartmentId, setCurrentDepartmentId] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [activeCell, setActiveCell] = useState(null);
+  const [clinicActualShifts, setClinicActualShifts] = useState({
+    RN: [[], [], [], [], [], [], []],
+    LVN: [[], [], [], [], [], [], []],
+    MA: [[], [], [], [], [], [], []],
+    OTHER: [[], [], [], [], [], [], []]
+  });
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
@@ -83,6 +90,13 @@ export default function AdminDashboard() {
       setClinicSupportCount(validUserIds.length);
 
       // Fetch Employee Profiles to calculate ACTUAL scheduled shifts
+      const actualShifts = {
+        RN: [[], [], [], [], [], [], []],
+        LVN: [[], [], [], [], [], [], []],
+        MA: [[], [], [], [], [], [], []],
+        OTHER: [[], [], [], [], [], [], []]
+      };
+      
       const actualCounts = {
         RN: [0, 0, 0, 0, 0, 0, 0],
         LVN: [0, 0, 0, 0, 0, 0, 0],
@@ -93,7 +107,7 @@ export default function AdminDashboard() {
       if (validUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('employee_profiles')
-          .select('staffing_role, schedule_pattern')
+          .select('user_id, staffing_role, schedule_pattern, shift_time, users(name)')
           .in('user_id', validUserIds)
           .eq('is_active', true);
           
@@ -115,6 +129,11 @@ export default function AdminDashboard() {
                 const val = pattern[startIdx + i];
                 if (val !== false && val !== null && val !== undefined) {
                   actualCounts[role][i] += 1;
+                  actualShifts[role][i].push({
+                    user_id: prof.user_id,
+                    name: prof.users?.name || 'Unknown',
+                    shift_time: val === true ? prof.shift_time : val
+                  });
                 }
               }
             }
@@ -122,6 +141,7 @@ export default function AdminDashboard() {
         }
       }
       setClinicActualShiftCounts(actualCounts);
+      setClinicActualShifts(actualShifts);
 
       // 3. Clinic Daily Shifts
       const { data: reqs } = await supabase
@@ -283,10 +303,41 @@ export default function AdminDashboard() {
                               }
                             }
                             
+                            const isActive = activeCell?.role === role && activeCell?.dayIndex === i;
+                            const scheduledStaff = clinicActualShifts[role][i] || [];
+                            
                             return (
-                              <div key={i} className={`text-xs font-semibold rounded-md py-1.5 ${cellStyle} flex items-center justify-center gap-1`}>
-                                <span>{actual}</span>
-                                <span className="opacity-60 font-normal text-[10px]">({required})</span>
+                              <div key={i} className="relative">
+                                <div 
+                                  onClick={() => setActiveCell(isActive ? null : { role, dayIndex: i })}
+                                  className={`text-xs font-semibold rounded-md py-1.5 cursor-pointer hover:opacity-80 transition-opacity ${cellStyle} flex items-center justify-center gap-1 border-2 ${isActive ? 'border-primary/50' : 'border-transparent'}`}
+                                >
+                                  <span>{actual}</span>
+                                  <span className="opacity-60 font-normal text-[10px]">({required})</span>
+                                </div>
+
+                                {isActive && (
+                                  <div className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-lg shadow-xl shadow-slate-200/50 border border-slate-200 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
+                                    <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-1">
+                                      <h5 className="text-xs font-bold text-slate-600">{role} &bull; {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</h5>
+                                      <button onClick={() => setActiveCell(null)} className="text-slate-400 hover:text-slate-600">
+                                        <span className="material-symbols-outlined text-[14px]">close</span>
+                                      </button>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto pr-1 space-y-2">
+                                      {scheduledStaff.length > 0 ? (
+                                        scheduledStaff.map((staff, idx) => (
+                                          <div key={idx} className="flex justify-between items-center text-xs p-1.5 hover:bg-slate-50 rounded">
+                                            <span className="font-semibold text-slate-800 truncate" title={staff.name}>{staff.name}</span>
+                                            <span className="text-slate-500 font-mono text-[10px] whitespace-nowrap ml-2 bg-slate-100 px-1.5 py-0.5 rounded">{staff.shift_time || 'Var'}</span>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="text-xs text-slate-400 italic text-center py-2">No staff scheduled</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
