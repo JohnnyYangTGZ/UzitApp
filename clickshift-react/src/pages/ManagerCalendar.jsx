@@ -38,6 +38,8 @@ export default function ManagerCalendar() {
   const [selectedTimeOffType, setSelectedTimeOffType] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [reason, setReason] = useState('');
   const [shiftTime, setShiftTime] = useState('Any');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -154,6 +156,13 @@ export default function ManagerCalendar() {
     fetchData();
   }, [selectedClinicId, currentMonth, refreshTrigger]);
 
+  useEffect(() => {
+    if (startDate !== endDate) {
+      setStartTime('');
+      setEndTime('');
+    }
+  }, [startDate, endDate]);
+
   const handleDateClick = (date) => {
     if (!date) return;
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -163,6 +172,8 @@ export default function ManagerCalendar() {
   const openTimeOffModal = (dateStr) => {
     setStartDate(dateStr);
     setEndDate(dateStr);
+    setStartTime('');
+    setEndTime('');
     setSelectedEmployee('');
     setSelectedTimeOffType('');
     setReason('');
@@ -217,6 +228,8 @@ export default function ManagerCalendar() {
       time_off_type_code: selectedTimeOffType,
       start_date: startDate,
       end_date: endDate,
+      start_time: startTime || null,
+      end_time: endTime || null,
       reason: reason,
       status: 'approved', // Auto-approve since manager is adding it
       reviewed_at: new Date().toISOString(),
@@ -647,6 +660,29 @@ export default function ManagerCalendar() {
                   />
                 </div>
               </div>
+              
+              {startDate && endDate && startDate === endDate && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Start Time (Optional)</label>
+                    <input 
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">End Time (Optional)</label>
+                    <input 
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              )}
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reason (Optional)</label>

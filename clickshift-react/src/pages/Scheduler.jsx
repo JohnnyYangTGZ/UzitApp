@@ -50,8 +50,6 @@ const getWeekDays = (dateStr) => {
 };
 
 const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  
   const formatTime = (timeStr) => {
     if (!timeStr) return '';
     const [h, m] = timeStr.split(':');
@@ -74,8 +72,6 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
   }
 
   const filledCount = employees?.length || 0;
-  const isFullyStaffed = filledCount >= reqCount;
-  const isPartiallyStaffed = filledCount > 0 && filledCount < reqCount;
 
   return (
     <div className="flex flex-col gap-2 h-full min-h-[80px]">
@@ -85,44 +81,39 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
           {formattedShiftTime}
         </div>
       )}
-      {/* Coverage Header (Clickable) */}
-      <button 
-        onClick={() => setIsExpanded(!isExpanded)}
-        className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs font-bold border transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isFullyStaffed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : isPartiallyStaffed ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}
-      >
-        <div className="flex items-center gap-1">
-          <span className="material-symbols-outlined text-[14px]">
-            {isExpanded ? 'expand_less' : 'expand_more'}
-          </span>
-          <span>Coverage</span>
-        </div>
-        <span>{filledCount} / {reqCount}</span>
-      </button>
       
-      {/* Expanded Content */}
-      {isExpanded && (
-        <div className="flex flex-col gap-2 animate-in slide-in-from-top-1 fade-in duration-200">
-          {/* Filled Slots */}
-          {employees && employees.map((emp, empIdx) => (
-            <div key={empIdx} className="flex items-center gap-1.5 bg-white border border-slate-200 p-1.5 rounded shadow-sm hover:border-blue-300 transition-colors">
-              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                {emp.users?.name?.charAt(0) || '?'}
+      <div className="flex flex-col gap-2">
+        {/* Filled Slots */}
+        {employees && employees.map((emp, empIdx) => {
+          const isPartial = emp.partialTimeOffs && emp.partialTimeOffs.length > 0;
+          return (
+            <div key={empIdx} className={`flex flex-col gap-1 p-1.5 rounded shadow-sm border transition-colors ${isPartial ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 ${isPartial ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {emp.users?.name?.charAt(0) || '?'}
+                </div>
+                <span className={`font-semibold text-xs truncate ${isPartial ? 'text-amber-800' : 'text-slate-700'}`} title={emp.users?.name}>
+                  {emp.users?.name}
+                </span>
               </div>
-              <span className="font-semibold text-slate-700 text-xs truncate" title={emp.users?.name}>
-                {emp.users?.name}
-              </span>
+              {isPartial && emp.partialTimeOffs.map((pt, i) => (
+                <div key={i} className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200 w-fit flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">beach_access</span>
+                  Off: {formatTime(pt.start_time)} - {formatTime(pt.end_time)}
+                </div>
+              ))}
             </div>
-          ))}
+          );
+        })}
 
-          {/* Unfilled Slots */}
-          {Array.from({ length: Math.max(0, reqCount - filledCount) }).map((_, missingIdx) => (
-            <div key={`missing-${missingIdx}`} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded">
-              <span className="material-symbols-outlined text-[14px] text-rose-500">warning</span>
-              <span className="font-semibold text-rose-700 text-xs italic">Unfilled Slot</span>
-            </div>
-          ))}
-        </div>
-      )}
+        {/* Unfilled Slots */}
+        {Array.from({ length: Math.max(0, reqCount - filledCount) }).map((_, missingIdx) => (
+          <div key={`missing-${missingIdx}`} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded">
+            <span className="material-symbols-outlined text-[14px] text-rose-500">warning</span>
+            <span className="font-semibold text-rose-700 text-xs italic">Unfilled Slot</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -286,7 +277,7 @@ export default function Scheduler() {
 
     const { data: timeOffData } = await supabase
       .from('time_off_requests')
-      .select('user_id, start_date, end_date')
+      .select('user_id, start_date, end_date, start_time, end_time')
       .eq('status', 'approved')
       .lte('start_date', endDate)
       .gte('end_date', startDate);
@@ -373,13 +364,14 @@ export default function Scheduler() {
       // Update employee isActive state for this day
       currentEmployees.forEach(emp => {
         const dateStr = dateObj.toISOString().split('T')[0];
-        const hasTimeOff = timeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+        const fullTimeOffs = timeOffData.filter(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
+        const hasFullTimeOff = fullTimeOffs.length > 0;
 
         let pattern = parsePattern(emp.schedule_pattern);
         const val = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
         const isScheduled = val !== false && val !== null && val !== undefined;
-        newEmployeeAssignments[emp.id].days[dayIndex].isActive = hasTimeOff ? false : isScheduled;
-        newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff = hasTimeOff;
+        newEmployeeAssignments[emp.id].days[dayIndex].isActive = hasFullTimeOff ? false : isScheduled;
+        newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff = hasFullTimeOff;
       });
 
       sortedShifts.forEach(shift => {
@@ -456,15 +448,24 @@ export default function Scheduler() {
 
         if (eligible.length > 0) {
           const needed = shift.required_count || 1;
-          const assignedEmps = eligible.slice(0, needed);
+          const assignedEmpsRaw = eligible.slice(0, needed);
           
           if (shift._isAdhoc && shift._assignedUserId) {
              const assignedAdhocEmp = eligible.find(e => e.user_id === shift._assignedUserId);
              if (assignedAdhocEmp) {
-               assignedEmps.length = 0;
-               assignedEmps.push(assignedAdhocEmp);
+               assignedEmpsRaw.length = 0;
+               assignedEmpsRaw.push(assignedAdhocEmp);
              }
           }
+
+          const dateStr = dateObj.toISOString().split('T')[0];
+          const assignedEmps = assignedEmpsRaw.map(e => {
+            const partials = timeOffData.filter(t => t.user_id === e.user_id && t.start_date <= dateStr && t.end_date >= dateStr && (t.start_time || t.end_time));
+            return {
+              ...e,
+              partialTimeOffs: partials
+            };
+          });
 
           newWeeklyAssignments[shift.id].push({ 
             isActive: true, 

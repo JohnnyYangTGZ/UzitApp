@@ -5,6 +5,8 @@ export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId
   const [typeCode, setTypeCode] = useState('PTO');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -15,9 +17,19 @@ export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId
       setEndDate(initialDate || '');
       setTypeCode('PTO');
       setReason('');
+      setStartTime('');
+      setEndTime('');
       setError(null);
     }
   }, [isOpen, initialDate]);
+
+  // Effect to clear times if dates don't match
+  useEffect(() => {
+    if (startDate !== endDate) {
+      setStartTime('');
+      setEndTime('');
+    }
+  }, [startDate, endDate]);
 
   if (!isOpen) return null;
 
@@ -44,6 +56,8 @@ export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId
           time_off_type_code: typeCode,
           start_date: startDate,
           end_date: endDate,
+          start_time: startTime || null,
+          end_time: endTime || null,
           reason: reason,
           status: 'pending'
         });
@@ -54,6 +68,8 @@ export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId
       setTypeCode('PTO');
       setStartDate('');
       setEndDate('');
+      setStartTime('');
+      setEndTime('');
       setReason('');
       
       onSuccess();
@@ -125,6 +141,29 @@ export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId
                 />
               </div>
             </div>
+
+            {startDate && endDate && startDate === endDate && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Start Time (Optional)</label>
+                  <input 
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg p-3 text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-slate-50 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">End Time (Optional)</label>
+                  <input 
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg p-3 text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all bg-slate-50 focus:bg-white"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Reason (Optional)</label>
