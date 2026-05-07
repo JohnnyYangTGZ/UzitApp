@@ -307,6 +307,7 @@ export default function ManagerEmployees() {
                     <div className="flex items-center gap-4 mt-3 text-sm text-blue-200">
                       <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">mail</span> {selectedEmployee?.users?.email}</span>
                       <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">phone</span> {selectedEmployee?.phone_number || 'N/A'}</span>
+                      <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">calendar_today</span> Seniority: {selectedEmployee?.seniority_date ? new Date(selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'N/A'}</span>
                     </div>
                   </div>
                   <div className="text-right relative">

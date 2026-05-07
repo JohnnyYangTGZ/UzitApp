@@ -126,7 +126,8 @@ export default function Employees() {
         clinics: clinics.length > 0 ? [clinics[0].id] : [],
         secondary_roles: [],
         systemRole: 'staff',
-        newPassword: ''
+        newPassword: '',
+        seniority_date: ''
       });
       setIsCreating(true);
       setIsEditing(true);
@@ -156,7 +157,8 @@ export default function Employees() {
       clinics: clinicIds,
       secondary_roles: selectedEmployee.secondary_roles || [],
       systemRole: selectedEmployee.users?.role || 'staff',
-      newPassword: ''
+      newPassword: '',
+      seniority_date: selectedEmployee.seniority_date || ''
     });
     setIsEditing(true);
   };
@@ -228,7 +230,8 @@ export default function Employees() {
           shift_time: editForm.shift_time,
           is_on_call: editForm.is_on_call,
           schedule_pattern: editForm.schedulePattern,
-          secondary_roles: editForm.secondary_roles
+          secondary_roles: editForm.secondary_roles,
+          seniority_date: editForm.seniority_date
         });
 
       if (profileError) {
@@ -412,6 +415,11 @@ export default function Employees() {
                             <p className="text-xs text-slate-500 uppercase tracking-wider">{emp.staffing_role}</p>
                           </td>
                           <td className="px-6 py-4">
+                            <span className="text-sm text-slate-700">
+                              {emp.seniority_date ? new Date(emp.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
                             <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
                               {emp.shift_time || 'Variable'}
                             </span>
@@ -576,6 +584,22 @@ export default function Employees() {
                   <div>
                     <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Operational Details</h4>
                     <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-slate-500 font-medium">Seniority Date</span>
+                        {isEditing ? (
+                          <input 
+                            type="date"
+                            value={editForm.seniority_date}
+                            onChange={e => setEditForm({...editForm, seniority_date: e.target.value})}
+                            className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[140px] focus:ring-1 focus:ring-primary outline-none text-slate-700"
+                            required
+                          />
+                        ) : (
+                          <span className="text-sm font-semibold text-slate-700">
+                            {selectedEmployee?.seniority_date ? new Date(selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-slate-500 font-medium">Standard Shift</span>
                         {isEditing ? (

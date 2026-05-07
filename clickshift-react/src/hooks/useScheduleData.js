@@ -19,6 +19,8 @@ export function useScheduleData() {
             id,
             date,
             time_block,
+            start_time,
+            end_time,
             location:location_id (name, code)
           )
         `)

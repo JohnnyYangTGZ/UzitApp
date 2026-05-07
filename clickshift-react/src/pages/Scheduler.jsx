@@ -179,9 +179,9 @@ export default function Scheduler() {
 
   useEffect(() => {
     if (shifts.length > 0 || employees.length > 0) {
-      calculateAssignments(shifts, employees);
+      fetchAdhocAndCalculate(shifts, employees);
     }
-  }, [selectedDate]);
+  }, [selectedDate, shifts, employees]);
 
   async function loadData() {
     setLoading(true);
@@ -235,8 +235,7 @@ export default function Scheduler() {
 
       setShifts(shiftsData || []);
       setEmployees(empsData || []);
-      
-      calculateAssignments(shiftsData || [], empsData || []);
+      // fetchAdhocAndCalculate will be triggered by useEffect when states update
 
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -246,8 +245,100 @@ export default function Scheduler() {
     }
   }
 
-  function calculateAssignments(currentShifts, currentEmployees) {
+  const parsePattern = (pattern) => {
+    if (!pattern) return null;
+    if (Array.isArray(pattern)) return pattern;
+    if (typeof pattern === 'string') {
+      try {
+        const parsed = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
+        if (Array.isArray(parsed)) return parsed;
+      } catch(e) {
+        const cleanStr = pattern.replace(/^\{|\}$|^\[|\]$/g, '');
+        return cleanStr.split(',').map(s => {
+          const t = s.trim();
+          if(t==='true'||t==='t') return true;
+          if(t==='false'||t==='f') return false;
+          if(t==='null'||t==='undefined') return null;
+          return t.replace(/^"|"$/g, '');
+        });
+      }
+    }
+    if (typeof pattern === 'object' && !Array.isArray(pattern)) {
+       return Object.keys(pattern).sort((a,b)=>Number(a)-Number(b)).map(k => pattern[k]);
+    }
+    return null;
+  };
+
+  async function fetchAdhocAndCalculate(currentShifts, currentEmployees) {
     const currentWeekDates = getWeekDays(selectedDate);
+    const startDate = currentWeekDates[0].toISOString().split('T')[0];
+    const endDate = currentWeekDates[6].toISOString().split('T')[0];
+
+    const { data: manualShiftsData } = await supabase
+      .from('shifts')
+      .select(`
+        id, date, time_block, start_time, end_time, staffing_role,
+        shift_assignments ( user_id )
+      `)
+      .eq('location_id', selectedClinicId)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    const { data: timeOffData } = await supabase
+      .from('time_off_requests')
+      .select('user_id, start_date, end_date')
+      .eq('status', 'approved')
+      .lte('start_date', endDate)
+      .gte('end_date', startDate);
+
+    let extendedShifts = [...currentShifts];
+    let templateOverrides = {}; 
+
+    if (manualShiftsData && manualShiftsData.length > 0) {
+      manualShiftsData.forEach(manual => {
+        if (manual.time_block === 'AD-HOC') {
+          const d = new Date(manual.date + 'T12:00:00Z');
+          const cycleDayIndex = getCycleDayIndex(d);
+
+          let pattern = Array(14).fill(false);
+          pattern[cycleDayIndex] = true;
+
+          extendedShifts.push({
+            id: manual.id,
+            custom_id: `AD-HOC ${manual.staffing_role || 'STAFF'}`,
+            location_id: selectedClinicId,
+            start_time: manual.start_time,
+            end_time: manual.end_time,
+            schedule_pattern: pattern,
+            time_block: manual.time_block,
+            day_type: 'WEEKDAY',
+            staffing_role: manual.staffing_role || 'OTHER',
+            required_count: 1,
+            priority_weight: 0,
+            _isAdhoc: true,
+            _assignedUserId: manual.shift_assignments?.[0]?.user_id || null
+          });
+        } else {
+          // Template override
+          if (!templateOverrides[manual.time_block]) {
+            templateOverrides[manual.time_block] = {};
+          }
+          if (!templateOverrides[manual.time_block][manual.date]) {
+            templateOverrides[manual.time_block][manual.date] = [];
+          }
+          if (manual.shift_assignments && manual.shift_assignments.length > 0) {
+            manual.shift_assignments.forEach(sa => {
+              templateOverrides[manual.time_block][manual.date].push(sa.user_id);
+            });
+          }
+        }
+      });
+    }
+
+    calculateAssignments(extendedShifts, currentEmployees, currentWeekDates, timeOffData || [], templateOverrides);
+  }
+
+  function calculateAssignments(currentShifts, currentEmployees, currentWeekDates, timeOffData = [], templateOverrides = {}) {
     setWeekDates(currentWeekDates);
 
     const sortedShifts = [...currentShifts].sort((a, b) => {
@@ -270,7 +361,7 @@ export default function Scheduler() {
     currentEmployees.forEach(emp => {
       newEmployeeAssignments[emp.id] = {
         employee: emp,
-        days: Array(7).fill().map(() => ({ isActive: false, shifts: [] }))
+        days: Array(7).fill().map(() => ({ isActive: false, isTimeOff: false, shifts: [] }))
       };
     });
 
@@ -281,25 +372,19 @@ export default function Scheduler() {
 
       // Update employee isActive state for this day
       currentEmployees.forEach(emp => {
-        let pattern = emp.schedule_pattern;
-        if (typeof pattern === 'string') {
-          try {
-            pattern = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
-          } catch(e) {}
-        }
+        const dateStr = dateObj.toISOString().split('T')[0];
+        const hasTimeOff = timeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+
+        let pattern = parsePattern(emp.schedule_pattern);
         const val = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
         const isScheduled = val !== false && val !== null && val !== undefined;
-        newEmployeeAssignments[emp.id].days[dayIndex].isActive = isScheduled;
+        newEmployeeAssignments[emp.id].days[dayIndex].isActive = hasTimeOff ? false : isScheduled;
+        newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff = hasTimeOff;
       });
 
       sortedShifts.forEach(shift => {
         // Is this shift active on this day?
-        let pattern = shift.schedule_pattern;
-        if (typeof pattern === 'string') {
-          try {
-            pattern = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
-          } catch(e) {}
-        }
+        let pattern = parsePattern(shift.schedule_pattern);
         const dayVal = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
         const isActive = dayVal !== false && dayVal !== null && dayVal !== undefined;
 
@@ -316,12 +401,7 @@ export default function Scheduler() {
 
         // Find eligible employees
         let eligible = currentEmployees.filter(emp => {
-          let pattern = emp.schedule_pattern;
-          if (typeof pattern === 'string') {
-            try {
-              pattern = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
-            } catch(e) { return false; }
-          }
+          let pattern = parsePattern(emp.schedule_pattern);
           // Must be scheduled to work
           if (!pattern || pattern.length !== 14) return false;
           
@@ -330,25 +410,46 @@ export default function Scheduler() {
 
           // If dayVal is a custom string, it must match the shift time block
           if (typeof dayVal === 'string') {
-            if (dayVal.trim() !== shiftTimeStr?.trim()) return false;
+            const empTimeClean = dayVal.trim();
+            const shiftTimeClean = (shiftTimeStr || '').trim();
+            if (empTimeClean !== shiftTimeClean) return false;
           }
 
-          // Must match role (primary or secondary)
+          // Must match role
           const primaryRole = (emp.staffing_role || '').trim();
           const shiftRole = (shift.staffing_role || '').trim();
           const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
           
           if (primaryRole !== shiftRole && !hasSecondary) return false;
-          
+
           // Must be authorized for this clinic
           const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
           if (!authorizedClinics.includes(selectedClinicId)) return false;
+
+          // Must not be on time off
+          if (newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff) return false;
           
-          // Must not be already assigned today
+          // Must not be already assigned
           if (assignedEmployeeIds.has(emp.id)) return false;
-          
+
           return true;
         });
+
+        // Check for template overrides (manual assignment to a template shift)
+        if (!shift._isAdhoc && templateOverrides && templateOverrides[shift.custom_id]) {
+          const dateStr = dateObj.toISOString().split('T')[0];
+          const overridenUserIds = templateOverrides[shift.custom_id][dateStr];
+          if (overridenUserIds && overridenUserIds.length > 0) {
+            // Extract these users from the current eligible list or the general pool
+            const overridenEmps = currentEmployees.filter(e => overridenUserIds.includes(e.user_id));
+            
+            // Remove them from general eligible list to avoid duplicates
+            eligible = eligible.filter(e => !overridenUserIds.includes(e.user_id));
+            
+            // Prepend them to the top of the eligible list so they get picked first
+            eligible = [...overridenEmps, ...eligible];
+          }
+        }
 
         // Sort alphabetically by name
         eligible.sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || ''));
@@ -356,6 +457,15 @@ export default function Scheduler() {
         if (eligible.length > 0) {
           const needed = shift.required_count || 1;
           const assignedEmps = eligible.slice(0, needed);
+          
+          if (shift._isAdhoc && shift._assignedUserId) {
+             const assignedAdhocEmp = eligible.find(e => e.user_id === shift._assignedUserId);
+             if (assignedAdhocEmp) {
+               assignedEmps.length = 0;
+               assignedEmps.push(assignedAdhocEmp);
+             }
+          }
+
           newWeeklyAssignments[shift.id].push({ 
             isActive: true, 
             employees: assignedEmps,

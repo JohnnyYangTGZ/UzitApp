@@ -12,7 +12,17 @@ export default function Sidebar() {
   const viewParam = searchParams.get('view');
   
   const [isAddShiftModalOpen, setIsAddShiftModalOpen] = useState(false);
+  const [addShiftInitialData, setAddShiftInitialData] = useState(null);
   const { clinics, selectedClinicId, setSelectedClinicId, loadingClinics } = useLocationContext();
+
+  useEffect(() => {
+    const handleOpenShift = (e) => {
+      setAddShiftInitialData(e.detail || null);
+      setIsAddShiftModalOpen(true);
+    };
+    window.addEventListener('open-add-shift', handleOpenShift);
+    return () => window.removeEventListener('open-add-shift', handleOpenShift);
+  }, []);
 
   // Reset "ALL" clinic selection if navigating away from the calendar
   useEffect(() => {
@@ -33,7 +43,7 @@ export default function Sidebar() {
 
   const managerItems = [
     { name: 'Manager\'s Dashboard', icon: 'dashboard', path: '/manager' },
-    { name: 'Time Off Calendar', icon: 'event_busy', path: '/manager/calendar' },
+    { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
     { name: 'Employees', icon: 'group', path: '/employees' },
     { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
   ];
@@ -111,7 +121,7 @@ export default function Sidebar() {
           </button>
         ) : !isStaff && (
           <button 
-            onClick={() => setIsAddShiftModalOpen(true)}
+            onClick={() => { setAddShiftInitialData(null); setIsAddShiftModalOpen(true); }}
             className="w-full bg-blue-900 text-white py-3 px-4 rounded-lg font-bold flex items-center justify-center gap-2 mb-6 hover:bg-blue-800 transition-colors"
           >
             <span className="material-symbols-outlined text-sm">add</span>
@@ -132,6 +142,7 @@ export default function Sidebar() {
 
       <AddShiftModal 
         isOpen={isAddShiftModalOpen} 
+        initialData={addShiftInitialData}
         onClose={() => setIsAddShiftModalOpen(false)} 
         onSuccess={() => {
           // If on admin or weekly-board, reload to see new data

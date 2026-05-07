@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId }) {
+export default function TimeOffRequestModal({ isOpen, onClose, onSuccess, userId, initialDate }) {
   const [typeCode, setTypeCode] = useState('PTO');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setStartDate(initialDate || '');
+      setEndDate(initialDate || '');
+      setTypeCode('PTO');
+      setReason('');
+      setError(null);
+    }
+  }, [isOpen, initialDate]);
 
   if (!isOpen) return null;
 

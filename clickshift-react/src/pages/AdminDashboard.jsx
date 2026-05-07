@@ -6,6 +6,15 @@ import { useLocationContext } from '../context/LocationContext';
 import CreateRoleModal from '../components/CreateRoleModal';
 import CreateClinicModal from '../components/CreateClinicModal';
 
+const ANCHOR_DATE = new Date(2025, 11, 14); // Sunday, Dec 14, 2025 (Start of a Week 1)
+function getCycleDayIndex(dateObj) {
+  const diffTime = dateObj.getTime() - ANCHOR_DATE.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  let cycleDayIndex = diffDays % 14;
+  if (cycleDayIndex < 0) cycleDayIndex += 14;
+  return cycleDayIndex;
+}
+
 export default function AdminDashboard() {
   const { clinics, selectedClinicId, setSelectedClinicId, loadingClinics } = useLocationContext();
   const navigate = useNavigate();
@@ -112,6 +121,29 @@ export default function AdminDashboard() {
           .eq('is_active', true);
           
         if (profileError) console.error('Error fetching profiles:', profileError);
+
+        // Calculate exact dates for the 7 days of the selected week (W1 or W2)
+        const today = new Date();
+        const currentCycleIndex = getCycleDayIndex(today);
+        const cycleStartDate = new Date(today);
+        cycleStartDate.setDate(today.getDate() - currentCycleIndex);
+        cycleStartDate.setHours(12, 0, 0, 0);
+
+        const weekDates = [];
+        const startIdx = weekOffset * 7;
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(cycleStartDate);
+          d.setDate(cycleStartDate.getDate() + startIdx + i);
+          weekDates.push(d.toISOString().split('T')[0]);
+        }
+
+        const { data: timeOffData } = await supabase
+          .from('time_off_requests')
+          .select('user_id, start_date, end_date')
+          .eq('status', 'approved')
+          .in('user_id', validUserIds)
+          .lte('start_date', weekDates[6])
+          .gte('end_date', weekDates[0]);
           
         if (profiles) {
           profiles.forEach(prof => {
@@ -129,7 +161,10 @@ export default function AdminDashboard() {
               const startIdx = weekOffset * 7;
               for (let i = 0; i < 7; i++) {
                 const val = pattern[startIdx + i];
-                if (val !== false && val !== null && val !== undefined) {
+                const dateStr = weekDates[i];
+                const hasTimeOff = timeOffData?.some(t => t.user_id === prof.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+
+                if (val !== false && val !== null && val !== undefined && !hasTimeOff) {
                   actualCounts[role][i] += 1;
                   actualShifts[role][i].push({
                     user_id: prof.user_id,

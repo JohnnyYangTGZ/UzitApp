@@ -49,7 +49,11 @@ export function LocationProvider({ children }) {
       if (!error && data) {
         setClinics(data);
         if (data.length > 0) {
-          setSelectedClinicId(data[0].id);
+          if (window.location.pathname === '/manager/calendar') {
+            setSelectedClinicId('ALL');
+          } else {
+            setSelectedClinicId(data[0].id);
+          }
         } else {
           setSelectedClinicId('');
         }

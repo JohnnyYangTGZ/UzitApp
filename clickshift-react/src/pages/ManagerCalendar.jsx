@@ -6,27 +6,40 @@ import { supabase } from '../lib/supabaseClient';
 import SearchableSelect from '../components/SearchableSelect';
 
 export default function ManagerCalendar() {
-  const { clinics, selectedClinicId } = useLocationContext();
+  const { clinics, selectedClinicId, setSelectedClinicId } = useLocationContext();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  // Default to ALL clinics when entering the calendar page
+  useEffect(() => {
+    setSelectedClinicId('ALL');
+  }, [setSelectedClinicId]);
   
   const [profiles, setProfiles] = useState([]);
   const [departmentProfiles, setDepartmentProfiles] = useState([]);
   const [timeOffs, setTimeOffs] = useState([]);
+  const [availabilities, setAvailabilities] = useState([]);
+  const [assignedShifts, setAssignedShifts] = useState([]);
   const [timeOffTypes, setTimeOffTypes] = useState([]);
   const [staffTypeFilter, setStaffTypeFilter] = useState('All Staff');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Menu State
+  const [activeDateMenu, setActiveDateMenu] = useState(null);
+  const [expandedAvailDate, setExpandedAvailDate] = useState(null);
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [selectedTimeOffType, setSelectedTimeOffType] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
+  const [shiftTime, setShiftTime] = useState('Any');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTimeOffForDetails, setSelectedTimeOffForDetails] = useState(null);
   const [editStatus, setEditStatus] = useState('');
@@ -100,9 +113,32 @@ export default function ManagerCalendar() {
           .lte('start_date', maxDateStr)
           .gte('end_date', minDateStr);
         setTimeOffs(offData || []);
+
+        // Fetch Availability
+        const { data: availData } = await supabase
+          .from('employee_availability')
+          .select('*')
+          .in('user_id', userIds)
+          .lte('date', maxDateStr)
+          .gte('date', minDateStr);
+        setAvailabilities(availData || []);
+
+        // Fetch Assignments
+        const { data: shiftsData } = await supabase
+          .from('shifts')
+          .select(`
+            id, date, start_time, end_time, time_block,
+            shift_assignments!inner ( user_id )
+          `)
+          .in('shift_assignments.user_id', userIds)
+          .lte('date', maxDateStr)
+          .gte('date', minDateStr);
+        setAssignedShifts(shiftsData || []);
       } else {
         setProfiles([]);
         setTimeOffs([]);
+        setAvailabilities([]);
+        setAssignedShifts([]);
       }
 
       // 5. Fetch Time Off Types
@@ -121,12 +157,26 @@ export default function ManagerCalendar() {
   const handleDateClick = (date) => {
     if (!date) return;
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    setActiveDateMenu(activeDateMenu === dateStr ? null : dateStr);
+  };
+
+  const openTimeOffModal = (dateStr) => {
     setStartDate(dateStr);
     setEndDate(dateStr);
     setSelectedEmployee('');
     setSelectedTimeOffType('');
     setReason('');
     setIsModalOpen(true);
+    setActiveDateMenu(null);
+  };
+
+  const openAvailabilityModal = (dateStr) => {
+    setStartDate(dateStr); // Reuse startDate for availability date
+    setSelectedEmployee('');
+    setShiftTime('Any');
+    setReason(''); // Reuse reason for notes
+    setIsAvailabilityModalOpen(true);
+    setActiveDateMenu(null);
   };
 
   const handleOpenDetails = (staff) => {
@@ -179,6 +229,27 @@ export default function ManagerCalendar() {
       console.error(error);
     } else {
       setIsModalOpen(false);
+      setRefreshTrigger(prev => prev + 1);
+    }
+  };
+
+  const handleSubmitAvailability = async (e) => {
+    e.preventDefault();
+    if (!selectedEmployee || !startDate || !shiftTime) return;
+    setIsSubmitting(true);
+    const { error } = await supabase.from('employee_availability').upsert({
+      user_id: selectedEmployee,
+      date: startDate,
+      shift_time: shiftTime,
+      notes: reason
+    }, { onConflict: 'user_id,date' });
+    
+    setIsSubmitting(false);
+    if (error) {
+      alert("Failed to add availability.");
+      console.error(error);
+    } else {
+      setIsAvailabilityModalOpen(false);
       setRefreshTrigger(prev => prev + 1);
     }
   };
@@ -250,6 +321,51 @@ export default function ManagerCalendar() {
       });
   };
 
+  const getStaffAvailOnDate = (date) => {
+    if (!date) return [];
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    return availabilities
+      .filter(avail => avail.date === dateStr)
+      .filter(avail => {
+        // Filter by Staff Type if selected
+        const prof = profiles.find(p => p.user_id === avail.user_id);
+        if (!prof) return false;
+        if (staffTypeFilter !== 'All Staff' && prof.staffing_role !== staffTypeFilter) return false;
+        return true;
+      })
+      .map(avail => {
+        const prof = profiles.find(p => p.user_id === avail.user_id);
+        
+        const confirmedShift = assignedShifts.find(shift => 
+          shift.date === dateStr && shift.shift_assignments?.some(sa => sa.user_id === avail.user_id)
+        );
+
+        const isConfirmed = !!confirmedShift;
+        let displayTime = avail.shift_time || 'Any';
+
+        if (confirmedShift) {
+          if (confirmedShift.start_time && confirmedShift.end_time) {
+            displayTime = `${confirmedShift.start_time.slice(0,5)} - ${confirmedShift.end_time.slice(0,5)}`;
+          } else if (confirmedShift.time_block) {
+            displayTime = confirmedShift.time_block;
+          }
+        }
+
+        return {
+          id: avail.id,
+          user_id: avail.user_id,
+          name: prof ? prof.users?.name : 'Unknown Staff',
+          role: prof ? prof.staffing_role : 'N/A',
+          shift_time: displayTime,
+          notes: avail.notes,
+          date: dateStr,
+          isConfirmed
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
   const getRoleColor = (role) => {
     const roleColors = {
       'RN': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -270,7 +386,7 @@ export default function ManagerCalendar() {
         {/* Header Section */}
         <div className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="font-h1 text-h1 text-primary mb-1">Time Off Calendar</h1>
+            <h1 className="font-h1 text-h1 text-primary mb-1">Calendar</h1>
             <p className="font-body-md text-on-surface-variant">
               {monthName} • {clinicName}
             </p>
@@ -334,31 +450,65 @@ export default function ManagerCalendar() {
             <div className="grid grid-cols-7 auto-rows-fr">
               {calendarCells.map((date, idx) => {
                 const staffOff = getStaffOffOnDate(date);
+                const staffAvail = getStaffAvailOnDate(date);
                 const isToday = date && date.toDateString() === today.toDateString();
+                const dateStr = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null;
                 
                 return (
                   <div 
                     key={idx} 
                     onClick={() => handleDateClick(date)}
-                    className={`min-h-[140px] border-b border-r border-surface-border p-2 last:border-r-0 transition-all ${!date ? 'bg-slate-50/50' : 'hover:bg-slate-50 cursor-pointer hover:border-primary/30 shadow-sm hover:shadow'}`}
+                    className={`min-h-[140px] border-b border-r border-surface-border p-2 relative last:border-r-0 transition-all ${!date ? 'bg-slate-50/50' : 'hover:bg-slate-50 cursor-pointer hover:border-primary/30 shadow-sm hover:shadow'}`}
                     style={{ borderRightWidth: (idx + 1) % 7 === 0 ? '0' : '1px' }}
                   >
                     {date && (
                       <>
+                        {activeDateMenu === dateStr && (
+                          <div className="absolute top-8 left-2 right-2 bg-white rounded-lg shadow-xl border border-slate-200 z-20 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTimeOffModal(dateStr);
+                              }}
+                              className="text-left px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2 font-semibold"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">event_busy</span>
+                              Add Time Off
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAvailabilityModal(dateStr);
+                              }}
+                              className="text-left px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-green-600 transition-colors flex items-center gap-2 font-semibold"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">event_available</span>
+                              Add Availability
+                            </button>
+                          </div>
+                        )}
                         <div className="flex justify-between items-start mb-2">
                           <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold ${isToday ? 'bg-primary text-white' : 'text-slate-700'}`}>
                             {date.getDate()}
                           </span>
-                          {staffOff.length > 0 && (
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1 mr-1">
-                              {staffOff.length} Off
-                            </span>
-                          )}
+                          <div className="flex flex-col items-end gap-0.5">
+                            {staffAvail.length > 0 && (
+                              <span 
+                                className="text-[10px] font-bold text-green-600 uppercase tracking-wider mr-1 cursor-pointer hover:text-green-800 transition-colors bg-green-50 px-1.5 py-0.5 rounded border border-green-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedAvailDate(expandedAvailDate === dateStr ? null : dateStr);
+                                }}
+                              >
+                                {staffAvail.length} Avail
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="space-y-1.5 overflow-y-auto max-h-[100px] pr-1">
                           {staffOff.map((staff, i) => (
                             <div 
-                              key={`${staff.id}-${i}`} 
+                              key={`off-${staff.id}-${i}`} 
                               className={`px-2 py-1 text-xs rounded border flex items-center justify-between cursor-pointer opacity-90 hover:opacity-100 transition-opacity ${getRoleColor(staff.role)}`}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -370,6 +520,61 @@ export default function ManagerCalendar() {
                             </div>
                           ))}
                         </div>
+                        {expandedAvailDate === dateStr && (
+                          <div className="absolute top-8 right-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-30 overflow-y-auto max-h-[200px] flex flex-col animate-in fade-in zoom-in-95 duration-100 p-1">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 mb-1 border-b border-slate-100 flex justify-between items-center">
+                              Available Staff
+                              <button onClick={(e) => { e.stopPropagation(); setExpandedAvailDate(null); }} className="hover:text-slate-600">
+                                <span className="material-symbols-outlined text-[14px]">close</span>
+                              </button>
+                            </div>
+                            {staffAvail.map((avail, i) => (
+                              <div 
+                                key={`avail-${avail.id}-${i}`} 
+                                className={`px-2 py-1.5 text-xs rounded flex flex-col transition-colors ${avail.isConfirmed ? 'opacity-70 bg-slate-50' : 'cursor-pointer hover:bg-slate-50'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (avail.isConfirmed) return;
+                                  
+                                  let startTime = '09:00';
+                                  let endTime = '17:00';
+                                  if (avail.shift_time && avail.shift_time.includes('-')) {
+                                    const parts = avail.shift_time.split('-');
+                                    if (parts.length === 2) {
+                                      const parsedStart = parts[0].trim();
+                                      const parsedEnd = parts[1].trim();
+                                      if (/^\d{2}:\d{2}$/.test(parsedStart)) startTime = parsedStart;
+                                      if (/^\d{2}:\d{2}$/.test(parsedEnd)) endTime = parsedEnd;
+                                    }
+                                  }
+
+                                  window.dispatchEvent(new CustomEvent('open-add-shift', {
+                                    detail: {
+                                      date: avail.date,
+                                      userId: avail.user_id,
+                                      staffingRole: avail.role,
+                                      startTime: startTime,
+                                      endTime: endTime
+                                    }
+                                  }));
+                                }}
+                              >
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-semibold text-slate-800 truncate mr-2">{avail.name}</span>
+                                  {avail.isConfirmed ? (
+                                    <span className="text-[9px] font-bold opacity-80 text-blue-700 bg-blue-100 px-1 rounded flex-shrink-0 uppercase">CONFIRMED</span>
+                                  ) : (
+                                    <span className="text-[9px] font-bold opacity-80 text-green-700 bg-green-100 px-1 rounded flex-shrink-0 uppercase">AVAIL</span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  {avail.shift_time}
+                                </span>
+                                {avail.notes && <span className="text-[9px] text-slate-400 italic mt-0.5 truncate">{avail.notes}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -468,6 +673,91 @@ export default function ManagerCalendar() {
                   className="px-4 py-2 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {isSubmitting ? 'Saving...' : 'Add Time Off'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Availability Modal */}
+      {isAvailabilityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-h3 text-h3 text-slate-800">Add Availability</h3>
+              <button onClick={() => setIsAvailabilityModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleSubmitAvailability} className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Employee</label>
+                <SearchableSelect 
+                  options={departmentProfiles.map(p => ({
+                    value: p.user_id,
+                    label: `${p.users?.name} (${p.staffing_role})`
+                  }))}
+                  value={selectedEmployee} 
+                  onChange={setSelectedEmployee}
+                  placeholder="Select an employee..."
+                  required
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date</label>
+                  <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={e => setStartDate(e.target.value)} 
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Available Time</label>
+                  <select 
+                    value={shiftTime}
+                    onChange={(e) => setShiftTime(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
+                    required
+                  >
+                    <option value="Any">Any Time</option>
+                    <option value="08:00 - 17:00">08:00 - 17:00 (Day)</option>
+                    <option value="12:00 - 20:00">12:00 - 20:00 (Swing)</option>
+                    <option value="08:00 - 12:00">08:00 - 12:00 (Morning)</option>
+                    <option value="13:00 - 17:00">13:00 - 17:00 (Afternoon)</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Notes (Optional)</label>
+                <input 
+                  type="text" 
+                  value={reason} 
+                  onChange={e => setReason(e.target.value)} 
+                  placeholder="Any preferences or constraints" 
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" 
+                />
+              </div>
+              
+              <div className="pt-4 mt-2 border-t border-slate-100 flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAvailabilityModalOpen(false)} 
+                  className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting} 
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Saving...' : 'Add Availability'}
                 </button>
               </div>
             </form>

@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useScheduleData } from '../hooks/useScheduleData';
 import TimeOffRequestModal from '../components/TimeOffRequestModal';
+import ProvideAvailabilityModal from '../components/ProvideAvailabilityModal';
 import { supabase } from '../lib/supabaseClient';
 
 export default function StaffSchedule() {
@@ -12,6 +13,9 @@ export default function StaffSchedule() {
   const [timeOffs, setTimeOffs] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+  const [activeDateMenu, setActiveDateMenu] = useState(null);
+  const [selectedDateForModal, setSelectedDateForModal] = useState('');
 
   // Derive start and end of the current month view
   const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -43,6 +47,15 @@ export default function StaffSchedule() {
     
     fetchTimeOffs();
   }, [user, currentDate, fetchMySchedule]);
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [hour, minute] = timeStr.split(':');
+    const d = new Date();
+    d.setHours(parseInt(hour, 10));
+    d.setMinutes(parseInt(minute, 10));
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
 
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -170,15 +183,52 @@ export default function StaffSchedule() {
           {loading ? (
             <div className="p-12 text-center text-slate-500">Loading schedule...</div>
           ) : (
-            <div className="grid grid-cols-7">
+            <div className="grid grid-cols-7 relative">
               {calendarDays.map((day, i) => (
-                <div key={day.dateStr} className={`min-h-[120px] p-3 border-b border-surface-border ${i % 7 !== 6 ? 'border-r border-surface-border' : ''} ${!day.isCurrentMonth ? 'bg-surface-container-low opacity-50' : ''}`}>
+                <div 
+                  key={day.dateStr} 
+                  className={`min-h-[120px] p-3 border-b border-surface-border relative ${i % 7 !== 6 ? 'border-r border-surface-border' : ''} ${!day.isCurrentMonth ? 'bg-surface-container-low opacity-50' : 'hover:bg-slate-50 cursor-pointer'}`}
+                  onClick={() => day.isCurrentMonth && setActiveDateMenu(activeDateMenu === day.dateStr ? null : day.dateStr)}
+                >
                   <span className="text-sm font-data-tabular">{day.date.getDate()}</span>
                   
+                  {activeDateMenu === day.dateStr && (
+                    <div className="absolute top-8 left-2 right-2 bg-white rounded-lg shadow-lg border border-slate-200 z-10 overflow-hidden flex flex-col animate-fade-in">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDateForModal(day.dateStr);
+                          setIsModalOpen(true);
+                          setActiveDateMenu(null);
+                        }}
+                        className="text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">event_busy</span>
+                        Request Time Off
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDateForModal(day.dateStr);
+                          setIsAvailabilityModalOpen(true);
+                          setActiveDateMenu(null);
+                        }}
+                        className="text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">event_available</span>
+                        Provide Availability
+                      </button>
+                    </div>
+                  )}
+
                   {day.shifts.map((assignment, idx) => (
                     <div key={`shift-${idx}`} className="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
-                      <p>{assignment.shifts.time_block} Shift</p>
-                      <p className="opacity-80 truncate">{assignment.shifts.location?.name}</p>
+                      <p className="truncate mb-0.5">{assignment.shifts.location?.name}</p>
+                      <p className="opacity-80">
+                        {assignment.shifts.start_time && assignment.shifts.end_time
+                          ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
+                          : `${assignment.shifts.time_block} Shift`}
+                      </p>
                     </div>
                   ))}
 
@@ -253,12 +303,22 @@ export default function StaffSchedule() {
       </div>
       
       {user && (
-        <TimeOffRequestModal 
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSuccess={fetchTimeOffs}
-          userId={user.id}
-        />
+        <>
+          <TimeOffRequestModal 
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            onSuccess={fetchTimeOffs}
+            userId={user.id}
+            initialDate={selectedDateForModal}
+          />
+          <ProvideAvailabilityModal 
+            isOpen={isAvailabilityModalOpen}
+            onClose={() => setIsAvailabilityModalOpen(false)}
+            onSuccess={() => { /* Could fetch availability here if needed */ }}
+            userId={user.id}
+            initialDate={selectedDateForModal}
+          />
+        </>
       )}
     </Layout>
   );

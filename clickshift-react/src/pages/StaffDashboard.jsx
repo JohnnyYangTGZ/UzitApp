@@ -25,7 +25,7 @@ export default function StaffDashboard() {
         .from('shift_assignments')
         .select(`
           id,
-          shifts ( date, time_block, locations ( name ) )
+          shifts ( date, time_block, start_time, end_time, locations ( name ) )
         `)
         .eq('user_id', user.id);
         
@@ -59,8 +59,18 @@ export default function StaffDashboard() {
   // Formatting helpers
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    const [y, m, d] = dateStr.split('-');
+    const date = new Date(y, m - 1, d);
     return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [hour, minute] = timeStr.split(':');
+    const d = new Date();
+    d.setHours(parseInt(hour, 10));
+    d.setMinutes(parseInt(minute, 10));
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
   const getStatusColor = (status) => {
@@ -99,24 +109,23 @@ export default function StaffDashboard() {
                 <div className="text-primary-fixed-dim animate-pulse">Loading upcoming shift...</div>
               ) : upcomingShift ? (
                 <>
-                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                    <div>
-                      <h2 className="font-h2 text-h2 mb-1">{upcomingShift.shifts.time_block} Shift</h2>
-                      <p className="text-primary-fixed-dim font-body-lg flex items-center gap-2">
-                        <span className="material-symbols-outlined text-lg">calendar_today</span>
-                        {formatDate(upcomingShift.shifts.date)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-primary-fixed-dim font-medium">{upcomingShift.shifts.time_block === 'Morning' ? '07:00 - 15:30' : '15:00 - 23:30'}</div>
-                      <div className="text-primary-fixed-dim font-medium">8 Hours Total</div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-8 pt-8 border-t border-white/10 flex gap-6">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary-fixed-dim">location_on</span>
-                      <span className="text-sm font-bold">{upcomingShift.shifts.locations?.name || 'Assigned Clinic'}</span>
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                    <div className="space-y-1">
+                      <h2 className="font-h2 text-h2 mb-2">{upcomingShift.shifts.locations?.name || 'Assigned Clinic'}</h2>
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-primary-fixed-dim font-body-lg flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[20px]">calendar_today</span>
+                          {formatDate(upcomingShift.shifts.date)}
+                        </p>
+                        <p className="text-primary-fixed-dim font-body-lg flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[20px]">schedule</span>
+                          <span>
+                            {upcomingShift.shifts.start_time && upcomingShift.shifts.end_time 
+                              ? `${formatTime(upcomingShift.shifts.start_time)} - ${formatTime(upcomingShift.shifts.end_time)}`
+                              : 'Time TBD'}
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </>

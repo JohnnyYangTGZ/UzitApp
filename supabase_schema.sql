@@ -136,6 +136,10 @@ create table shifts (
   id uuid primary key default uuid_generate_v4(),
   date date not null,
   time_block text not null,
+  start_time time,
+  end_time time,
+  staffing_role text,
+  is_working_day boolean not null default true,
   location_id uuid not null references locations(id) on delete cascade,
   generated_from_pattern_entry_id uuid references schedule_pattern_entries(id) on delete set null,
   created_at timestamp default now()
