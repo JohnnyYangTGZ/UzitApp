@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .ilike('email', email)
+        .ilike('email', email.trim())
         .eq('password', password)
         .single();
       
