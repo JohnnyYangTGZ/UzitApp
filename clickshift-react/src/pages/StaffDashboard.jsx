@@ -28,13 +28,109 @@ export default function StaffDashboard() {
           shifts ( date, time_block, start_time, end_time, locations ( name ) )
         `)
         .eq('user_id', user.id);
+      const ANCHOR_DATE = new Date(2025, 11, 14);
+      const getCycleDayIndex = (dateObj) => {
+        const diffTime = dateObj.getTime() - ANCHOR_DATE.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        let cycleDayIndex = diffDays % 14;
+        if (cycleDayIndex < 0) cycleDayIndex += 14;
+        return cycleDayIndex;
+      };
+
+      const { data: profile } = await supabase
+        .from('employee_profiles')
+        .select('schedule_pattern, shift_time')
+        .eq('user_id', user.id)
+        .single();
         
-      if (assignments) {
-        const upcoming = assignments
-          .filter(a => a.shifts && a.shifts.date >= todayStr)
-          .sort((a, b) => new Date(a.shifts.date) - new Date(b.shifts.date))[0];
-        setUpcomingShift(upcoming);
+      const { data: clinics } = await supabase
+        .from('employee_clinics')
+        .select('locations(name)')
+        .eq('user_id', user.id);
+      
+      const primaryClinicName = clinics && clinics.length > 0 ? clinics[0].locations?.name : 'Assigned Clinic';
+
+      let pattern = null;
+      if (profile && profile.schedule_pattern) {
+        if (Array.isArray(profile.schedule_pattern)) {
+           pattern = profile.schedule_pattern;
+        } else if (typeof profile.schedule_pattern === 'string') {
+           try {
+             pattern = JSON.parse(profile.schedule_pattern.replace('{', '[').replace('}', ']'));
+           } catch(e) {}
+        } else if (typeof profile.schedule_pattern === 'object') {
+           pattern = Object.keys(profile.schedule_pattern).sort((a,b)=>Number(a)-Number(b)).map(k => profile.schedule_pattern[k]);
+        }
       }
+
+      const { data: futureTimeOffs } = await supabase
+        .from('time_off_requests')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .gte('end_date', todayStr);
+
+      const isTimeOffDay = (dateStr) => {
+        return futureTimeOffs?.some(t => t.start_date <= dateStr && t.end_date >= dateStr);
+      };
+
+      const manualAssignmentsMap = {};
+      if (assignments) {
+        assignments.forEach(a => {
+          if (a.shifts && a.shifts.date >= todayStr) {
+             manualAssignmentsMap[a.shifts.date] = {
+               shifts: {
+                 locations: a.shifts.locations,
+                 date: a.shifts.date,
+                 start_time: a.shifts.start_time,
+                 end_time: a.shifts.end_time
+               }
+             };
+          }
+        });
+      }
+
+      let foundUpcoming = null;
+      for (let i = 0; i < 30; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const dateStr = d.toISOString().split('T')[0];
+        
+        if (manualAssignmentsMap[dateStr]) {
+           foundUpcoming = manualAssignmentsMap[dateStr];
+           break;
+        }
+        
+        if (isTimeOffDay(dateStr)) continue;
+        
+        if (pattern && pattern.length === 14) {
+          const cycleIdx = getCycleDayIndex(d);
+          const val = pattern[cycleIdx];
+          
+          if (val !== false && val !== null && val !== undefined) {
+             let sTime = '09:00:00';
+             let eTime = '17:30:00';
+             let shiftTimeString = typeof val === 'string' ? val : (profile?.shift_time || '');
+             if (shiftTimeString && shiftTimeString.includes('-')) {
+                const parts = shiftTimeString.split('-');
+                sTime = parts[0].trim() + (parts[0].trim().length === 5 ? ':00' : '');
+                eTime = parts[1].trim() + (parts[1].trim().length === 5 ? ':00' : '');
+             }
+
+             foundUpcoming = {
+               shifts: {
+                 locations: { name: primaryClinicName },
+                 date: dateStr,
+                 start_time: sTime,
+                 end_time: eTime
+               }
+             };
+             break;
+          }
+        }
+      }
+      
+      setUpcomingShift(foundUpcoming);
 
       // Fetch recent time off requests
       const { data: requests } = await supabase

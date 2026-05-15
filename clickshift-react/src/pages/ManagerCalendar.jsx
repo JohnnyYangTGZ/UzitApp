@@ -30,6 +30,7 @@ export default function ManagerCalendar() {
   // Menu State
   const [activeDateMenu, setActiveDateMenu] = useState(null);
   const [expandedAvailDate, setExpandedAvailDate] = useState(null);
+  const [activeConfMenu, setActiveConfMenu] = useState(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -125,11 +126,10 @@ export default function ManagerCalendar() {
           .gte('date', minDateStr);
         setAvailabilities(availData || []);
 
-        // Fetch Assignments
         const { data: shiftsData } = await supabase
           .from('shifts')
           .select(`
-            id, date, start_time, end_time, time_block,
+            id, date, start_time, end_time, time_block, location_id, locations ( name ),
             shift_assignments!inner ( user_id )
           `)
           .in('shift_assignments.user_id', userIds)
@@ -167,6 +167,7 @@ export default function ManagerCalendar() {
     if (!date) return;
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     setActiveDateMenu(activeDateMenu === dateStr ? null : dateStr);
+    setActiveConfMenu(null);
   };
 
   const openTimeOffModal = (dateStr) => {
@@ -354,6 +355,10 @@ export default function ManagerCalendar() {
           shift.date === dateStr && shift.shift_assignments?.some(sa => sa.user_id === avail.user_id)
         );
 
+        if (selectedClinicId !== 'ALL' && confirmedShift && confirmedShift.location_id !== selectedClinicId) {
+          return null;
+        }
+
         const isConfirmed = !!confirmedShift;
         let displayTime = avail.shift_time || 'Any';
 
@@ -373,9 +378,11 @@ export default function ManagerCalendar() {
           shift_time: displayTime,
           notes: avail.notes,
           date: dateStr,
-          isConfirmed
+          isConfirmed,
+          clinic: confirmedShift?.locations?.name || 'Unknown Clinic'
         };
       })
+      .filter(Boolean)
       .sort((a, b) => a.name.localeCompare(b.name));
   };
 
@@ -460,7 +467,7 @@ export default function ManagerCalendar() {
               <span className="text-slate-400">Loading calendar data...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-7 auto-rows-fr">
+            <div className="grid grid-cols-7 auto-rows-auto">
               {calendarCells.map((date, idx) => {
                 const staffOff = getStaffOffOnDate(date);
                 const staffAvail = getStaffAvailOnDate(date);
@@ -505,7 +512,7 @@ export default function ManagerCalendar() {
                             {date.getDate()}
                           </span>
                           <div className="flex flex-col items-end gap-0.5">
-                            {staffAvail.length > 0 && (
+                            {staffAvail.filter(a => !a.isConfirmed).length > 0 && (
                               <span 
                                 className="text-[10px] font-bold text-green-600 uppercase tracking-wider mr-1 cursor-pointer hover:text-green-800 transition-colors bg-green-50 px-1.5 py-0.5 rounded border border-green-200"
                                 onClick={(e) => {
@@ -513,25 +520,84 @@ export default function ManagerCalendar() {
                                   setExpandedAvailDate(expandedAvailDate === dateStr ? null : dateStr);
                                 }}
                               >
-                                {staffAvail.length} Avail
+                                {staffAvail.filter(a => !a.isConfirmed).length} Avail
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="space-y-1.5 overflow-y-auto max-h-[100px] pr-1">
-                          {staffOff.map((staff, i) => (
-                            <div 
-                              key={`off-${staff.id}-${i}`} 
-                              className={`px-2 py-1 text-xs rounded border flex items-center justify-between cursor-pointer opacity-90 hover:opacity-100 transition-opacity ${getRoleColor(staff.role)}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDetails(staff);
-                              }}
-                            >
-                              <span className="font-semibold truncate mr-2">{staff.name}</span>
-                              <span className="text-[9px] font-bold opacity-70 bg-black/10 px-1 rounded flex-shrink-0 uppercase">{staff.type}</span>
-                            </div>
-                          ))}
+                        <div className="space-y-1.5 pr-1">
+                          {(() => {
+                            const unassignedConfirmed = [...staffAvail.filter(a => a.isConfirmed)];
+                            const items = [];
+                            
+                            staffOff.forEach((staff, i) => {
+                              items.push(
+                                <div 
+                                  key={`off-${staff.id}-${i}`} 
+                                  className={`px-2 py-1 text-xs rounded border flex items-center justify-between cursor-pointer opacity-90 hover:opacity-100 transition-opacity ${getRoleColor(staff.role)}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDetails(staff);
+                                  }}
+                                >
+                                  <span className="font-semibold truncate mr-2">{staff.name}</span>
+                                  <span className="text-[9px] font-bold opacity-70 bg-black/10 px-1 rounded flex-shrink-0 uppercase">{staff.type}</span>
+                                </div>
+                              );
+                              
+                              const matchIndex = unassignedConfirmed.findIndex(a => a.role === staff.role);
+                              if (matchIndex !== -1) {
+                                const coveringStaff = unassignedConfirmed.splice(matchIndex, 1)[0];
+                                items.push(
+                                  <div 
+                                    key={`conf-${coveringStaff.id}-${i}`} 
+                                    className={`px-2 py-1 text-xs rounded border flex items-center justify-between cursor-pointer opacity-90 hover:opacity-100 transition-opacity relative ${getRoleColor(coveringStaff.role)}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveConfMenu(activeConfMenu === coveringStaff.id ? null : coveringStaff.id);
+                                    }}
+                                  >
+                                    <span className="font-semibold truncate mr-2">- {coveringStaff.name}</span>
+                                    <span className="text-[9px] font-bold opacity-70 bg-black/10 px-1 rounded flex-shrink-0 uppercase">CONF</span>
+                                    {activeConfMenu === coveringStaff.id && (
+                                      <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-[70] p-2 animate-in fade-in zoom-in-95 duration-100 cursor-default" onClick={e => e.stopPropagation()}>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Working At</p>
+                                        <p className="font-semibold text-slate-800 text-xs mb-2">{coveringStaff.clinic}</p>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Shift Time</p>
+                                        <p className="font-semibold text-slate-800 text-xs">{coveringStaff.shift_time}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                            });
+                            
+                            unassignedConfirmed.forEach((coveringStaff, i) => {
+                                items.push(
+                                  <div 
+                                    key={`conf-unmatched-${coveringStaff.id}-${i}`} 
+                                    className={`px-2 py-1 text-xs rounded border flex items-center justify-between cursor-pointer opacity-90 hover:opacity-100 transition-opacity relative ${getRoleColor(coveringStaff.role)}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveConfMenu(activeConfMenu === coveringStaff.id ? null : coveringStaff.id);
+                                    }}
+                                  >
+                                    <span className="font-semibold truncate mr-2">- {coveringStaff.name}</span>
+                                    <span className="text-[9px] font-bold opacity-70 bg-black/10 px-1 rounded flex-shrink-0 uppercase">CONF</span>
+                                    {activeConfMenu === coveringStaff.id && (
+                                      <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-[70] p-2 animate-in fade-in zoom-in-95 duration-100 cursor-default" onClick={e => e.stopPropagation()}>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Working At</p>
+                                        <p className="font-semibold text-slate-800 text-xs mb-2">{coveringStaff.clinic}</p>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Shift Time</p>
+                                        <p className="font-semibold text-slate-800 text-xs">{coveringStaff.shift_time}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                            });
+                            
+                            return items;
+                          })()}
                         </div>
                         {expandedAvailDate === dateStr && (
                           <div className="absolute top-8 right-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 z-30 overflow-y-auto max-h-[200px] flex flex-col animate-in fade-in zoom-in-95 duration-100 p-1">
@@ -541,13 +607,12 @@ export default function ManagerCalendar() {
                                 <span className="material-symbols-outlined text-[14px]">close</span>
                               </button>
                             </div>
-                            {staffAvail.map((avail, i) => (
+                            {staffAvail.filter(a => !a.isConfirmed).map((avail, i) => (
                               <div 
                                 key={`avail-${avail.id}-${i}`} 
-                                className={`px-2 py-1.5 text-xs rounded flex flex-col transition-colors ${avail.isConfirmed ? 'opacity-70 bg-slate-50' : 'cursor-pointer hover:bg-slate-50'}`}
+                                className="px-2 py-1.5 text-xs rounded flex flex-col transition-colors cursor-pointer hover:bg-slate-50"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (avail.isConfirmed) return;
                                   
                                   let startTime = '09:00';
                                   let endTime = '17:00';
@@ -574,11 +639,7 @@ export default function ManagerCalendar() {
                               >
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="font-semibold text-slate-800 truncate mr-2">{avail.name}</span>
-                                  {avail.isConfirmed ? (
-                                    <span className="text-[9px] font-bold opacity-80 text-blue-700 bg-blue-100 px-1 rounded flex-shrink-0 uppercase">CONFIRMED</span>
-                                  ) : (
-                                    <span className="text-[9px] font-bold opacity-80 text-green-700 bg-green-100 px-1 rounded flex-shrink-0 uppercase">AVAIL</span>
-                                  )}
+                                  <span className="text-[9px] font-bold opacity-80 text-green-700 bg-green-100 px-1 rounded flex-shrink-0 uppercase">AVAIL</span>
                                 </div>
                                 <span className="text-[10px] text-slate-500 font-medium">
                                   {avail.shift_time}

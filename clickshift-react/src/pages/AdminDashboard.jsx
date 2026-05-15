@@ -59,6 +59,7 @@ export default function AdminDashboard() {
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
+  const [headerDates, setHeaderDates] = useState([]);
 
   useEffect(() => {
     if (!selectedClinicId) return;
@@ -130,12 +131,15 @@ export default function AdminDashboard() {
         cycleStartDate.setHours(12, 0, 0, 0);
 
         const weekDates = [];
+        const shortDates = [];
         const startIdx = weekOffset * 7;
         for (let i = 0; i < 7; i++) {
           const d = new Date(cycleStartDate);
           d.setDate(cycleStartDate.getDate() + startIdx + i);
           weekDates.push(d.toISOString().split('T')[0]);
+          shortDates.push(`${d.getMonth() + 1}/${d.getDate()}`);
         }
+        setHeaderDates(shortDates);
 
         const { data: timeOffData } = await supabase
           .from('time_off_requests')
@@ -320,7 +324,10 @@ export default function AdminDashboard() {
                       <div className="grid grid-cols-8 gap-2 mb-3">
                         <div className="text-xs font-bold text-slate-400 flex items-center">ROLE</div>
                         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                          <div key={i} className="text-xs font-bold text-slate-500 py-1">{day}</div>
+                          <div key={i} className="flex flex-col items-center justify-center py-1">
+                            <span className="text-xs font-bold text-slate-500">{day}</span>
+                            <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{headerDates[i]}</span>
+                          </div>
                         ))}
                       </div>
                       {['RN', 'LVN', 'MA'].map(role => (

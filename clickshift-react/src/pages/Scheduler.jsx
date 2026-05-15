@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
@@ -49,7 +49,27 @@ const getWeekDays = (dateStr) => {
   return week;
 };
 
-const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
+const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandidates, onAssign }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [candidateToConfirm, setCandidateToConfirm] = useState(null);
+  const dropdownRef = useRef(null);
+
+  const [showTimeEdit, setShowTimeEdit] = useState(false);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+        setCandidateToConfirm(null);
+        setShowTimeEdit(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const formatTime = (timeStr) => {
     if (!timeStr) return '';
     const [h, m] = timeStr.split(':');
@@ -71,10 +91,193 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
     );
   }
 
-  const filledCount = employees?.length || 0;
+  const handleSelectCandidate = (cand) => {
+    setCandidateToConfirm(cand);
+    setShowTimeEdit(false);
+    if (shiftTime && shiftTime.includes('-')) {
+      const [s, e] = shiftTime.split('-');
+      setCustomStart(s.slice(0, 5));
+      setCustomEnd(e.slice(0, 5));
+    } else {
+      setCustomStart('09:00');
+      setCustomEnd('17:00');
+    }
+  };
+
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':').map(Number);
+    return parts[0] * 60 + parts[1];
+  };
+
+  const formatMinutesToTime = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const d = new Date();
+    d.setHours(h, m, 0);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const uncoveredIntervals = [];
+  if (shiftTime && shiftTime.includes('-')) {
+    const [shiftStartStr, shiftEndStr] = shiftTime.split('-');
+    const shiftStart = timeToMinutes(shiftStartStr);
+    const shiftEnd = timeToMinutes(shiftEndStr);
+    
+    const coverage = new Array(Math.max(0, shiftEnd - shiftStart)).fill(0);
+    
+    (employees || []).forEach(emp => {
+      let empStart = shiftStart;
+      let empEnd = shiftEnd;
+      
+      if (emp.custom_start_time) empStart = Math.max(shiftStart, timeToMinutes(emp.custom_start_time));
+      if (emp.custom_end_time) empEnd = Math.min(shiftEnd, timeToMinutes(emp.custom_end_time));
+      
+      for (let i = empStart; i < empEnd; i++) {
+        if (i >= shiftStart && i < shiftEnd) {
+          coverage[i - shiftStart]++;
+        }
+      }
+      
+      if (emp.partialTimeOffs) {
+        emp.partialTimeOffs.forEach(pt => {
+          const ptStart = Math.max(shiftStart, timeToMinutes(pt.start_time));
+          const ptEnd = Math.min(shiftEnd, timeToMinutes(pt.end_time));
+          for (let i = ptStart; i < ptEnd; i++) {
+            if (i >= shiftStart && i < shiftEnd && i >= empStart && i < empEnd) {
+                 coverage[i - shiftStart]--;
+            }
+          }
+        });
+      }
+    });
+    
+    for (let depth = 1; depth <= (reqCount || 1); depth++) {
+       let gapStart = null;
+       for (let i = 0; i < coverage.length; i++) {
+         if (coverage[i] < depth) {
+           if (gapStart === null) gapStart = i;
+         } else {
+           if (gapStart !== null) {
+             uncoveredIntervals.push({ start: shiftStart + gapStart, end: shiftStart + i });
+             gapStart = null;
+           }
+         }
+       }
+       if (gapStart !== null) {
+         uncoveredIntervals.push({ start: shiftStart + gapStart, end: shiftEnd });
+       }
+    }
+  } else {
+    const filledCount = employees?.length || 0;
+    const missingCount = Math.max(0, reqCount - filledCount);
+    for (let i = 0; i < missingCount; i++) {
+      uncoveredIntervals.push({ start: null, end: null, isFull: true });
+    }
+  }
+  const hasCandidates = availableCandidates && availableCandidates.length > 0;
 
   return (
-    <div className="flex flex-col gap-2 h-full min-h-[80px]">
+    <div className="flex flex-col gap-2 h-full min-h-[80px] relative">
+      {hasCandidates && (
+        <div ref={dropdownRef} className="absolute -top-2 -right-2 z-20">
+          <button 
+            onClick={() => {
+              setShowDropdown(!showDropdown);
+              setCandidateToConfirm(null);
+              setShowTimeEdit(false);
+            }}
+            className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-md hover:bg-emerald-600 transition-colors border border-white"
+            title={`${availableCandidates.length} Available Staff`}
+          >
+            <span className="material-symbols-outlined text-[12px]">add</span>
+          </button>
+          
+          {showDropdown && (
+            <div className="absolute right-0 top-6 w-56 bg-white border border-slate-200 shadow-xl rounded-lg overflow-hidden z-30">
+              <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[14px] text-emerald-600">person_add</span>
+                <span className="font-bold text-xs text-emerald-800">Available Staff</span>
+              </div>
+              
+              {candidateToConfirm ? (
+                <div className="p-3 bg-slate-50 flex flex-col gap-2">
+                  <p className="text-xs text-slate-700 leading-tight">
+                    Assign <span className="font-bold">{candidateToConfirm.users?.name}</span>?
+                  </p>
+
+                  <button 
+                    onClick={() => setShowTimeEdit(!showTimeEdit)}
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 w-fit mt-1"
+                  >
+                    <span className="material-symbols-outlined text-[12px]">{showTimeEdit ? 'expand_less' : 'edit'}</span>
+                    {showTimeEdit ? 'Hide Time Options' : 'Edit Time (Partial Shift)'}
+                  </button>
+
+                  {showTimeEdit && (
+                    <div className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 mt-1">
+                      <input 
+                        type="time" 
+                        value={customStart}
+                        onChange={(e) => setCustomStart(e.target.value)}
+                        className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
+                      />
+                      <span className="text-xs text-slate-400">-</span>
+                      <input 
+                        type="time" 
+                        value={customEnd}
+                        onChange={(e) => setCustomEnd(e.target.value)}
+                        className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 mt-2">
+                    <button 
+                      onClick={() => {
+                        setCandidateToConfirm(null);
+                        setShowTimeEdit(false);
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-white border border-slate-300 text-slate-700 text-[10px] font-bold rounded hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (onAssign) onAssign(candidateToConfirm, customStart, customEnd);
+                        setShowDropdown(false);
+                        setCandidateToConfirm(null);
+                        setShowTimeEdit(false);
+                      }}
+                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto py-1">
+                  {availableCandidates.map((cand, idx) => (
+                    <button 
+                      key={idx}
+                      onClick={() => setCandidateToConfirm(cand)}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2 group border-b border-slate-50 last:border-0"
+                    >
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold shrink-0">
+                        {cand.users?.name?.charAt(0) || '?'}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700 truncate group-hover:text-blue-600 transition-colors">
+                        {cand.users?.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {shiftTime && (
         <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded w-fit border border-amber-200 shadow-sm" title="Shift Time">
           <span className="material-symbols-outlined text-[12px]">schedule</span>
@@ -92,9 +295,16 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 ${isPartial ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                   {emp.users?.name?.charAt(0) || '?'}
                 </div>
-                <span className={`font-semibold text-xs truncate ${isPartial ? 'text-amber-800' : 'text-slate-700'}`} title={emp.users?.name}>
-                  {emp.users?.name}
-                </span>
+                <div className="flex flex-col overflow-hidden">
+                  <span className={`font-semibold text-xs truncate ${isPartial ? 'text-amber-800' : 'text-slate-700'}`} title={emp.users?.name}>
+                    {emp.users?.name}
+                  </span>
+                  {(emp.custom_start_time || emp.custom_end_time) && (
+                    <span className="text-[9px] font-bold text-slate-500 whitespace-nowrap">
+                      {formatTime(emp.custom_start_time)} - {formatTime(emp.custom_end_time)}
+                    </span>
+                  )}
+                </div>
               </div>
               {isPartial && emp.partialTimeOffs.map((pt, i) => (
                 <div key={i} className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200 w-fit flex items-center gap-1">
@@ -107,12 +317,17 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime }) => {
         })}
 
         {/* Unfilled Slots */}
-        {Array.from({ length: Math.max(0, reqCount - filledCount) }).map((_, missingIdx) => (
-          <div key={`missing-${missingIdx}`} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded">
-            <span className="material-symbols-outlined text-[14px] text-rose-500">warning</span>
-            <span className="font-semibold text-rose-700 text-xs italic">Unfilled Slot</span>
-          </div>
-        ))}
+        {uncoveredIntervals.map((interval, missingIdx) => {
+          const isFull = interval.isFull || (shiftTime && shiftTime.includes('-') && interval.start === timeToMinutes(shiftTime.split('-')[0]) && interval.end === timeToMinutes(shiftTime.split('-')[1]));
+          return (
+            <div key={`missing-${missingIdx}`} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded">
+              <span className="material-symbols-outlined text-[14px] text-rose-500">warning</span>
+              <span className="font-semibold text-rose-700 text-xs italic">
+                {isFull ? 'Unfilled Slot' : `Unfilled: ${formatMinutesToTime(interval.start)} - ${formatMinutesToTime(interval.end)}`}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -155,6 +370,69 @@ export default function Scheduler() {
   const [availableRoles, setAvailableRoles] = useState([]);
 
   const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'the selected clinic';
+
+  const handleAssign = async (shiftCustomId, role, defaultStartTime, defaultEndTime, dateObj, userId, customStartTime, customEndTime) => {
+    try {
+      setLoading(true);
+      const dateStr = dateObj.toISOString().split('T')[0];
+      
+      const startTime = customStartTime || defaultStartTime;
+      const endTime = customEndTime || defaultEndTime;
+
+      // Check if a manual shift exists for this date, time_block AND exact start/end time
+      let shiftId;
+      
+      let query = supabase
+        .from('shifts')
+        .select('id')
+        .eq('location_id', selectedClinicId)
+        .eq('date', dateStr)
+        .eq('time_block', shiftCustomId);
+        
+      if (startTime) query = query.eq('start_time', startTime);
+      else query = query.is('start_time', null);
+      
+      if (endTime) query = query.eq('end_time', endTime);
+      else query = query.is('end_time', null);
+
+      const { data: existingShifts } = await query.limit(1);
+      
+      if (existingShifts && existingShifts.length > 0) {
+        shiftId = existingShifts[0].id;
+      } else {
+        const { data: newShift, error: shiftError } = await supabase
+          .from('shifts')
+          .insert({
+            location_id: selectedClinicId,
+            date: dateStr,
+            time_block: shiftCustomId,
+            start_time: startTime,
+            end_time: endTime,
+            staffing_role: role
+          })
+          .select('id')
+          .single();
+        if (shiftError) throw shiftError;
+        shiftId = newShift.id;
+      }
+
+      const { error: assignError } = await supabase
+        .from('shift_assignments')
+        .insert({
+          shift_id: shiftId,
+          user_id: userId
+        });
+
+      if (assignError) throw assignError;
+
+      // Refresh data
+      loadData();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedClinicId && selectedDepartmentId) {
@@ -282,6 +560,12 @@ export default function Scheduler() {
       .lte('start_date', endDate)
       .gte('end_date', startDate);
 
+    const { data: availabilityData } = await supabase
+      .from('employee_availability')
+      .select('user_id, date, shift_time, notes')
+      .lte('date', endDate)
+      .gte('date', startDate);
+
     let extendedShifts = [...currentShifts];
     let templateOverrides = {}; 
 
@@ -319,17 +603,21 @@ export default function Scheduler() {
           }
           if (manual.shift_assignments && manual.shift_assignments.length > 0) {
             manual.shift_assignments.forEach(sa => {
-              templateOverrides[manual.time_block][manual.date].push(sa.user_id);
+              templateOverrides[manual.time_block][manual.date].push({
+                user_id: sa.user_id,
+                start_time: manual.start_time,
+                end_time: manual.end_time
+              });
             });
           }
         }
       });
     }
 
-    calculateAssignments(extendedShifts, currentEmployees, currentWeekDates, timeOffData || [], templateOverrides);
+    calculateAssignments(extendedShifts, currentEmployees, currentWeekDates, timeOffData || [], templateOverrides, availabilityData || []);
   }
 
-  function calculateAssignments(currentShifts, currentEmployees, currentWeekDates, timeOffData = [], templateOverrides = {}) {
+  function calculateAssignments(currentShifts, currentEmployees, currentWeekDates, timeOffData = [], templateOverrides = {}, availabilityData = []) {
     setWeekDates(currentWeekDates);
 
     const sortedShifts = [...currentShifts].sort((a, b) => {
@@ -405,6 +693,17 @@ export default function Scheduler() {
             const empTimeClean = dayVal.trim();
             const shiftTimeClean = (shiftTimeStr || '').trim();
             if (empTimeClean !== shiftTimeClean) return false;
+          } else if (dayVal === true && emp.shift_time) {
+            // If dayVal is true, the employee's default shift_time must match the shift's time
+            let empShiftTimeStr = emp.shift_time;
+            if (empShiftTimeStr.includes('-')) {
+               const parts = empShiftTimeStr.split('-');
+               const sTime = parts[0].trim().slice(0,5);
+               const eTime = parts[1].trim().slice(0,5);
+               empShiftTimeStr = `${sTime}-${eTime}`;
+            }
+            const shiftTimeClean = (shiftTimeStr || '').trim();
+            if (empShiftTimeStr !== shiftTimeClean) return false;
           }
 
           // Must match role
@@ -430,8 +729,9 @@ export default function Scheduler() {
         // Check for template overrides (manual assignment to a template shift)
         if (!shift._isAdhoc && templateOverrides && templateOverrides[shift.custom_id]) {
           const dateStr = dateObj.toISOString().split('T')[0];
-          const overridenUserIds = templateOverrides[shift.custom_id][dateStr];
-          if (overridenUserIds && overridenUserIds.length > 0) {
+          const overridenAssignments = templateOverrides[shift.custom_id][dateStr];
+          if (overridenAssignments && overridenAssignments.length > 0) {
+            const overridenUserIds = overridenAssignments.map(o => o.user_id);
             // Extract these users from the current eligible list or the general pool
             const overridenEmps = currentEmployees.filter(e => overridenUserIds.includes(e.user_id));
             
@@ -446,6 +746,30 @@ export default function Scheduler() {
         // Sort alphabetically by name
         eligible.sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || ''));
 
+        let availableCandidates = [];
+        const dateStr = dateObj.toISOString().split('T')[0];
+        const availForDay = availabilityData.filter(a => a.date === dateStr);
+        if (availForDay.length > 0) {
+          availableCandidates = currentEmployees.filter(emp => {
+            if (assignedEmployeeIds.has(emp.id)) return false;
+            
+            const primaryRole = (emp.staffing_role || '').trim();
+            const shiftRole = (shift.staffing_role || '').trim();
+            const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
+            if (primaryRole !== shiftRole && !hasSecondary) return false;
+
+            const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
+            if (!authorizedClinics.includes(selectedClinicId)) return false;
+
+            if (newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff) return false;
+
+            const availRecord = availForDay.find(avail => avail.user_id === emp.user_id);
+            if (!availRecord) return false;
+
+            return true;
+          });
+        }
+
         if (eligible.length > 0) {
           const needed = shift.required_count || 1;
           const assignedEmpsRaw = eligible.slice(0, needed);
@@ -458,19 +782,32 @@ export default function Scheduler() {
              }
           }
 
-          const dateStr = dateObj.toISOString().split('T')[0];
           const assignedEmps = assignedEmpsRaw.map(e => {
             const partials = timeOffData.filter(t => t.user_id === e.user_id && t.start_date <= dateStr && t.end_date >= dateStr && (t.start_time || t.end_time));
+            
+            let customTimes = {};
+            if (!shift._isAdhoc && templateOverrides && templateOverrides[shift.custom_id] && templateOverrides[shift.custom_id][dateStr]) {
+              const overrideData = templateOverrides[shift.custom_id][dateStr].find(o => o.user_id === e.user_id);
+              if (overrideData) {
+                customTimes = { custom_start_time: overrideData.start_time, custom_end_time: overrideData.end_time };
+              }
+            }
+
             return {
               ...e,
+              ...customTimes,
               partialTimeOffs: partials
             };
           });
+          
+          const assignedIds = new Set(assignedEmps.map(e => e.id));
+          availableCandidates = availableCandidates.filter(c => !assignedIds.has(c.id));
 
           newWeeklyAssignments[shift.id].push({ 
             isActive: true, 
             employees: assignedEmps,
-            customTime: typeof dayVal === 'string' ? dayVal : null
+            customTime: typeof dayVal === 'string' ? dayVal : null,
+            availableCandidates
           });
           assignedEmps.forEach(e => {
             assignedEmployeeIds.add(e.id);
@@ -482,7 +819,8 @@ export default function Scheduler() {
           newWeeklyAssignments[shift.id].push({ 
             isActive: true, 
             employees: [],
-            customTime: typeof dayVal === 'string' ? dayVal : null
+            customTime: typeof dayVal === 'string' ? dayVal : null,
+            availableCandidates
           }); // Unfilled
         }
       });
@@ -656,10 +994,11 @@ export default function Scheduler() {
                                 </td>
 
                                 {/* 7 Day Columns */}
-                                {weekDates.map((_, i) => {
+                                {weekDates.map((dateObj, i) => {
                                   // Aggregate data across all shifts in this timeGroup for day `i`
                                   let reqCount = 0;
                                   let employees = [];
+                                  let availableCandidates = [];
                                   let isActive = false;
                                   let customTime = null;
 
@@ -671,11 +1010,18 @@ export default function Scheduler() {
                                       if (dayData.employees) {
                                         employees = [...employees, ...dayData.employees];
                                       }
+                                      if (dayData.availableCandidates) {
+                                        availableCandidates = [...availableCandidates, ...dayData.availableCandidates];
+                                      }
                                       if (dayData.customTime) {
                                         customTime = dayData.customTime;
                                       }
                                     }
                                   });
+                                  
+                                  availableCandidates = availableCandidates.filter((cand, index, self) => 
+                                    index === self.findIndex(c => c.id === cand.id)
+                                  );
                                   
                                   const defaultTimeStr = group.start_time && group.end_time 
                                     ? `${group.start_time.slice(0,5)}-${group.end_time.slice(0,5)}` 
@@ -690,6 +1036,8 @@ export default function Scheduler() {
                                         reqCount={reqCount} 
                                         employees={employees} 
                                         shiftTime={effectiveTime}
+                                        availableCandidates={availableCandidates}
+                                        onAssign={(candidate, customStart, customEnd) => handleAssign(group.custom_id, group.staffing_role, group.start_time, group.end_time, dateObj, candidate.user_id, customStart, customEnd)}
                                       />
                                     </td>
                                   );
