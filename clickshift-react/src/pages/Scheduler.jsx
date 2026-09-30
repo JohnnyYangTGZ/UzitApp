@@ -837,11 +837,11 @@ export default function Scheduler() {
         <div className="flex items-center justify-between shrink-0">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className="material-symbols-outlined text-3xl text-blue-600">auto_awesome</span>
-              <h1 className="font-h1 text-h1 text-on-surface">Auto-Scheduler</h1>
+              <span className="material-symbols-outlined text-3xl text-blue-600">calendar_month</span>
+              <h1 className="font-h1 text-h1 text-on-surface">Schedule</h1>
             </div>
             <p className="text-body-md text-on-surface-variant max-w-2xl">
-              Generating Daily Schedule for {clinicName}.
+              Daily Schedule for {clinicName}.
             </p>
           </div>
           

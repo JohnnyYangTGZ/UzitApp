@@ -50,7 +50,7 @@ export default function Sidebar() {
 
   const adminItems = [
     { name: 'Admin Dashboard', icon: 'dashboard', path: '/admin' },
-    { name: 'Auto-Scheduler', icon: 'auto_awesome', path: '/scheduler' },
+    { name: 'Schedule', icon: 'calendar_month', path: '/scheduler' },
     { name: 'Employees', icon: 'group', path: '/employees' },
     { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
   ];
