@@ -863,28 +863,43 @@ export default function Scheduler() {
 
   const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'the selected clinic';
 
-  const assignedUserIds = new Set();
-  Object.values(weeklyAssignments).forEach(daysArr => {
-    if (Array.isArray(daysArr)) {
-      daysArr.forEach(day => {
-        if (day && day.employees && Array.isArray(day.employees)) {
-          day.employees.forEach(emp => {
-            if (emp.user_id) assignedUserIds.add(emp.user_id);
-            if (emp.id) assignedUserIds.add(emp.id);
-          });
-        }
-      });
-    }
-  });
-  Object.values(employeeAssignments).forEach(empRecord => {
-    if (empRecord && empRecord.days && Array.isArray(empRecord.days)) {
-      const hasShifts = empRecord.days.some(d => d.shifts && d.shifts.length > 0);
-      if (hasShifts && empRecord.employee) {
-        if (empRecord.employee.user_id) assignedUserIds.add(empRecord.employee.user_id);
-        if (empRecord.employee.id) assignedUserIds.add(empRecord.employee.id);
+  const getExpectedWeeklyShiftsCount = (emp) => {
+    if (!emp || !weekDates || weekDates.length === 0) return 0;
+    const pattern = parsePattern(emp.schedule_pattern);
+    if (!pattern || pattern.length !== 14) return 0;
+    let count = 0;
+    weekDates.forEach(dateObj => {
+      const idx = getCycleDayIndex(dateObj);
+      const val = pattern[idx];
+      if (val !== false && val !== null && val !== undefined) {
+        count++;
       }
-    }
-  });
+    });
+    return count;
+  };
+
+  const getAssignedWeeklyShiftsCount = (emp) => {
+    if (!emp) return 0;
+    let count = 0;
+    Object.values(weeklyAssignments).forEach(daysArr => {
+      if (Array.isArray(daysArr)) {
+        daysArr.forEach(day => {
+          if (day && day.employees && Array.isArray(day.employees)) {
+            if (day.employees.some(e => e.user_id === emp.user_id || e.id === emp.id || e.id === emp.user_id)) {
+              count++;
+            }
+          }
+        });
+      }
+    });
+    return count;
+  };
+
+  const getShiftsRemainingCount = (emp) => {
+    const expected = getExpectedWeeklyShiftsCount(emp);
+    const assigned = getAssignedWeeklyShiftsCount(emp);
+    return Math.max(0, expected - assigned);
+  };
 
   const currentCycleDayIndex = selectedDate ? getCycleDayIndex(new Date(selectedDate + 'T12:00:00Z')) : 0;
 
@@ -896,9 +911,16 @@ export default function Scheduler() {
   };
 
   const filteredPoolEmps = employees.filter(emp => {
-    if (assignedUserIds.has(emp.user_id) || assignedUserIds.has(emp.id)) {
+    const expected = getExpectedWeeklyShiftsCount(emp);
+    const assigned = getAssignedWeeklyShiftsCount(emp);
+
+    if (expected > 0 && assigned >= expected) {
       return false;
     }
+    if (expected === 0 && assigned > 0) {
+      return false;
+    }
+
     const nameMatch = (emp.users?.name || '').toLowerCase().includes(searchPool.toLowerCase());
     const roleMatch = rolePoolFilter === 'All' || emp.staffing_role === rolePoolFilter || (Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(rolePoolFilter));
     return nameMatch && roleMatch;
@@ -907,6 +929,10 @@ export default function Scheduler() {
     const bNeeded = isEmpScheduledToday(b);
     if (aNeeded && !bNeeded) return -1;
     if (!aNeeded && bNeeded) return 1;
+    const aRem = getShiftsRemainingCount(a);
+    const bRem = getShiftsRemainingCount(b);
+    if (aRem > 0 && bRem === 0) return -1;
+    if (aRem === 0 && bRem > 0) return 1;
     return (a.users?.name || '').localeCompare(b.users?.name || '');
   });
 
@@ -1879,6 +1905,10 @@ export default function Scheduler() {
                     ) : (
                       filteredPoolEmps.map(emp => {
                         const needsAssignment = isEmpScheduledToday(emp);
+                        const remaining = getShiftsRemainingCount(emp);
+                        const expected = getExpectedWeeklyShiftsCount(emp);
+                        const isPartiallyAssigned = expected > 0 && remaining > 0;
+
                         return (
                           <div 
                             key={emp.id}
@@ -1898,14 +1928,16 @@ export default function Scheduler() {
                             className={`group border rounded-xl p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all shadow-sm hover:shadow-md select-none ${
                               needsAssignment
                                 ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-200/60 hover:border-amber-400'
-                                : 'bg-white hover:bg-blue-50/80 border-slate-200 hover:border-blue-400'
+                                : isPartiallyAssigned
+                                  ? 'bg-blue-50/70 border-blue-200 ring-1 ring-blue-100 hover:border-blue-300'
+                                  : 'bg-white hover:bg-blue-50/80 border-slate-200 hover:border-blue-400'
                             }`}
                           >
                             <span className="material-symbols-outlined text-slate-400 group-hover:text-blue-600 text-lg shrink-0">
                               drag_indicator
                             </span>
                             <div className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center shrink-0 shadow-sm ${
-                              needsAssignment ? 'bg-amber-600 text-white' : 'bg-blue-900 text-white'
+                              needsAssignment ? 'bg-amber-600 text-white' : isPartiallyAssigned ? 'bg-blue-700 text-white' : 'bg-blue-900 text-white'
                             }`}>
                               {emp.users?.name?.charAt(0) || '?'}
                             </div>
@@ -1914,12 +1946,17 @@ export default function Scheduler() {
                                 <p className="font-bold text-slate-800 text-xs truncate group-hover:text-blue-900">
                                   {emp.users?.name}
                                 </p>
-                                {needsAssignment && (
+                                {needsAssignment ? (
                                   <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shrink-0 shadow-xs">
                                     <span className="material-symbols-outlined text-[10px]">warning</span>
                                     Assignment Needed
                                   </span>
-                                )}
+                                ) : isPartiallyAssigned ? (
+                                  <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shrink-0 shadow-xs">
+                                    <span className="material-symbols-outlined text-[10px]">schedule</span>
+                                    Shifts Remaining {remaining}
+                                  </span>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="bg-blue-100 text-blue-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase">
