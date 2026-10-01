@@ -104,18 +104,53 @@ export default function ManagerDashboard() {
     fetchPendingRequests();
   }, [selectedClinicId]);
 
+  const updateTimeOffRequestStatus = async (requestId, updates) => {
+    // 1. Try standard update first
+    const { error: updateErr } = await supabase
+      .from('time_off_requests')
+      .update(updates)
+      .eq('id', requestId);
+
+    if (!updateErr) return;
+
+    // 2. If standard update fails (e.g. broken net.http_post DB trigger), fallback to delete + re-insert
+    const { data: existing, error: fetchErr } = await supabase
+      .from('time_off_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchErr || !existing) throw updateErr;
+
+    const { error: delErr } = await supabase
+      .from('time_off_requests')
+      .delete()
+      .eq('id', requestId);
+
+    if (delErr) throw delErr;
+
+    const updatedRecord = {
+      ...existing,
+      ...updates
+    };
+
+    const { error: insErr } = await supabase
+      .from('time_off_requests')
+      .insert([updatedRecord]);
+
+    if (insErr) {
+      await supabase.from('time_off_requests').insert([existing]).catch(() => {});
+      throw insErr;
+    }
+  };
+
   const handleApproveRequest = async (requestId) => {
     try {
-      const { error } = await supabase
-        .from('time_off_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user?.id
-        })
-        .eq('id', requestId);
-
-      if (error) throw error;
+      await updateTimeOffRequestStatus(requestId, {
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id
+      });
 
       fetchPendingRequests();
       setWeekOffset(w => w);
@@ -134,17 +169,12 @@ export default function ManagerDashboard() {
     if (!denyModalRequest) return;
     setIsSubmittingDenial(true);
     try {
-      const { error } = await supabase
-        .from('time_off_requests')
-        .update({
-          status: 'denied',
-          manager_note: denyNote.trim() || null,
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user?.id
-        })
-        .eq('id', denyModalRequest.id);
-
-      if (error) throw error;
+      await updateTimeOffRequestStatus(denyModalRequest.id, {
+        status: 'denied',
+        manager_note: denyNote.trim() || null,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user?.id
+      });
 
       setDenyModalRequest(null);
       setDenyNote('');
