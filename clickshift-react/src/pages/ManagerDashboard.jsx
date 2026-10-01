@@ -77,7 +77,7 @@ export default function ManagerDashboard() {
             id,
             name,
             email,
-            employee_profiles (
+            employee_profiles!employee_profiles_user_id_fkey (
               job_title,
               staffing_role,
               employee_code
@@ -589,7 +589,8 @@ export default function ManagerDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {pendingRequests.map(req => {
-                const empProfile = req.users?.employee_profiles?.[0];
+                const rawProfile = req.users?.employee_profiles;
+                const empProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
                 const empName = req.users?.name || 'Staff Member';
                 const empRole = empProfile?.job_title || empProfile?.staffing_role || 'Staff';
                 const firstLetter = empName.charAt(0).toUpperCase();
