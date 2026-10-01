@@ -1,5 +1,5 @@
 ---
-name: ClickShift Design System
+name: Uzit Design System
 colors:
   surface: '#f8f9ff'
   surface-dim: '#d8dae0'
@@ -108,10 +108,10 @@ spacing:
   row-height-dense: 40px
 ---
 
-# ClickShift - Product Requirements Document (PRD)
+# Uzit - Product Requirements Document (PRD)
 
 ## Project Overview
-**ClickShift** is a workforce scheduling and time-off management platform designed for outpatient clinics. It differentiates between personal schedule awareness (Staff), operational staffing visibility (Managers), and system-level pattern control (Admins).
+**Uzit** is a workforce scheduling and time-off management platform designed for outpatient clinics. It differentiates between personal schedule awareness (Staff), operational staffing visibility (Managers), and system-level pattern control (Admins).
 
 ---
 

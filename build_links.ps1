@@ -1,6 +1,6 @@
 New-Item -ItemType Directory -Force -Path "app"
 
-Copy-Item "clickshift_login\code.html" -Destination "app\login.html" -Force
+Copy-Item "uzit_login\code.html" -Destination "app\login.html" -Force
 Copy-Item "staff_dashboard\code.html" -Destination "app\staff_dashboard.html" -Force
 Copy-Item "manager_dashboard_shift_management\code.html" -Destination "app\manager_dashboard.html" -Force
 Copy-Item "staff_schedule_month_view\code.html" -Destination "app\staff_schedule.html" -Force

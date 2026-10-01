@@ -27,10 +27,30 @@ export default function ManagerEmployees() {
   const [absenceNotes, setAbsenceNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const getAccrualInfo = (emp) => {
+    if (!emp) return { sick_leave_accrual_date: '', sick_leave_accrual_amount: '', vacation_accrual_rate: '' };
+    let sDate = emp.sick_leave_accrual_date;
+    let sAmount = emp.sick_leave_accrual_amount;
+    let vRate = emp.vacation_accrual_rate;
+
+    try {
+      const localData = JSON.parse(localStorage.getItem(`accrual_${emp.user_id}`) || '{}');
+      if (sDate === undefined || sDate === null || sDate === '') sDate = localData.sick_leave_accrual_date;
+      if (sAmount === undefined || sAmount === null || sAmount === '') sAmount = localData.sick_leave_accrual_amount;
+      if (vRate === undefined || vRate === null || vRate === '') vRate = localData.vacation_accrual_rate;
+    } catch(e) {}
+
+    return {
+      sick_leave_accrual_date: sDate || '',
+      sick_leave_accrual_amount: sAmount !== undefined && sAmount !== null ? sAmount : '',
+      vacation_accrual_rate: vRate !== undefined && vRate !== null ? vRate : ''
+    };
+  };
+
   async function loadEmployees() {
     if (!selectedDepartmentId) return;
     setLoading(true);
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('employee_profiles')
       .select(`
         user_id,
@@ -42,6 +62,9 @@ export default function ManagerEmployees() {
         schedule_pattern,
         is_on_call,
         secondary_roles,
+        sick_leave_accrual_date,
+        sick_leave_accrual_amount,
+        vacation_accrual_rate,
         users!employee_profiles_user_id_fkey!inner (
           id,
           name,
@@ -56,9 +79,41 @@ export default function ManagerEmployees() {
       .order('employee_code');
 
     if (error) {
-      console.error('Error fetching employees:', error);
-      setErrorMsg(error.message || JSON.stringify(error));
-    } else if (data) {
+      const fallback = await supabase
+        .from('employee_profiles')
+        .select(`
+          user_id,
+          employee_code,
+          job_title,
+          staffing_role,
+          phone_number,
+          shift_time,
+          schedule_pattern,
+          is_on_call,
+          secondary_roles,
+          users!employee_profiles_user_id_fkey!inner (
+            id,
+            name,
+            email,
+            employee_clinics (
+              clinic_id,
+              locations ( id, name )
+            )
+          )
+        `)
+        .eq('department_id', selectedDepartmentId)
+        .order('employee_code');
+        
+      data = fallback.data;
+      if (fallback.error) {
+        console.error('Error fetching employees:', fallback.error);
+        setErrorMsg(fallback.error.message || JSON.stringify(fallback.error));
+      } else {
+        setErrorMsg('');
+      }
+    }
+
+    if (data) {
       const sortedData = [...data].sort((a, b) => {
         const nameA = a.users?.name || '';
         const nameB = b.users?.name || '';
@@ -530,6 +585,50 @@ export default function ManagerEmployees() {
                           )}
                         </div>
                       </div>
+
+                      {/* Leave & Accrual Settings Card */}
+                      {(() => {
+                        const accruals = getAccrualInfo(selectedEmployee);
+                        return (
+                          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                              <span className="material-symbols-outlined text-teal-600">account_balance_wallet</span>
+                              Leave & Accrual Settings
+                            </h3>
+                            <div className="space-y-4">
+                              <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-2">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-semibold text-slate-600">Sick Leave Start Date</span>
+                                  <span className="font-bold text-slate-800 font-mono">
+                                    {accruals.sick_leave_accrual_date ? new Date(accruals.sick_leave_accrual_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-semibold text-slate-600">Sick Leave Accrual Amount</span>
+                                  <span className="font-bold text-slate-800 font-mono">
+                                    {accruals.sick_leave_accrual_amount !== '' && accruals.sick_leave_accrual_amount !== null ? `${accruals.sick_leave_accrual_amount} hrs` : 'Not set'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 italic">
+                                  Starting on {accruals.sick_leave_accrual_date || 'MM/DD/YY'}, sick leave accrual is {accruals.sick_leave_accrual_amount || '0'} hrs.
+                                </p>
+                              </div>
+
+                              <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-2">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-semibold text-slate-600">Vacation Accrual Rate</span>
+                                  <span className="font-bold text-slate-800 font-mono">
+                                    {accruals.vacation_accrual_rate !== '' && accruals.vacation_accrual_rate !== null ? `${accruals.vacation_accrual_rate} hrs/month` : 'Not set'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 italic">
+                                  Accrues at {accruals.vacation_accrual_rate || '0.00'} hours per month every pay period.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   </div>

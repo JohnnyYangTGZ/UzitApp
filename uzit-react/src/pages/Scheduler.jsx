@@ -91,46 +91,68 @@ const normalizeTimeString = (tStr) => {
 
 const normalizeTimeRange = (rangeStr) => {
   if (!rangeStr) return '';
-  const str = String(rangeStr);
+  let str = String(rangeStr).trim();
+  str = str.replace(/[–—]/g, '-').replace(/\s+to\s+/gi, '-');
   if (str.includes('-')) {
     const parts = str.split('-');
     const s = normalizeTimeString(parts[0]);
     const e = normalizeTimeString(parts[1]);
     if (s && e) return `${s}-${e}`;
   }
-  return str.trim();
+  return str;
+};
+
+const isTruthyVal = (val) => {
+  if (!val) return false;
+  if (val === true || val === 1 || val === '1' || val === 't' || val === 'true') return true;
+  if (typeof val === 'string' && val.trim().length > 0 && val !== 'false') return true;
+  return false;
+};
+
+const formatLocalDate = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const checkShiftTimeCompatibility = (empVal, empShiftTime, shiftVal, shift) => {
-  let empTime = typeof empVal === 'string'
-    ? normalizeTimeRange(empVal)
-    : (empVal === true && empShiftTime ? normalizeTimeRange(empShiftTime) : '');
+  if (!shift) return true;
 
+  let empTime = '';
+  if (typeof empVal === 'string' && empVal.includes('-')) {
+    empTime = normalizeTimeRange(empVal);
+  } else if (isTruthyVal(empVal) && empShiftTime && String(empShiftTime).toLowerCase() !== 'variable') {
+    empTime = normalizeTimeRange(empShiftTime);
+  }
+
+  // If employee has no standard shift time set (e.g. Variable/Flexible), they can work any shift
   if (!empTime) return true;
 
-  let shiftTime = typeof shiftVal === 'string' ? normalizeTimeRange(shiftVal) : '';
-  let shiftPattern = parsePattern(shift.schedule_pattern);
-  let shiftPatternTimes = Array.isArray(shiftPattern)
-    ? shiftPattern.filter(x => typeof x === 'string').map(normalizeTimeRange)
-    : [];
-  let shiftStartEndTime = (shift.start_time && shift.end_time)
-    ? normalizeTimeRange(`${shift.start_time}-${shift.end_time}`)
-    : '';
+  // Determine target shift time: prioritize explicit start_time & end_time
+  let shiftTime = '';
+  if (shift.start_time && shift.end_time) {
+    shiftTime = normalizeTimeRange(`${shift.start_time}-${shift.end_time}`);
+  } else if (shift.time_block && shift.time_block.includes('-')) {
+    shiftTime = normalizeTimeRange(shift.time_block);
+  } else if (typeof shiftVal === 'string' && shiftVal.includes('-')) {
+    shiftTime = normalizeTimeRange(shiftVal);
+  } else {
+    // Check schedule pattern array for time strings
+    let shiftPattern = parsePattern(shift.schedule_pattern);
+    if (Array.isArray(shiftPattern)) {
+      const times = shiftPattern.filter(x => typeof x === 'string' && x.includes('-')).map(normalizeTimeRange);
+      if (times.length > 0) {
+        return times.includes(empTime);
+      }
+    }
+  }
 
+  // If shift has a specific target time, employee time MUST match
   if (shiftTime) {
     return empTime === shiftTime;
-  }
-
-  if (shiftPatternTimes.length > 0) {
-    if (shiftPatternTimes.includes(empTime)) return true;
-    if ((shift.custom_id || '').toLowerCase().includes('early') && empTime.startsWith('08:30')) return true;
-    return false;
-  }
-
-  if (shiftStartEndTime) {
-    if (empTime === shiftStartEndTime) return true;
-    if ((shift.custom_id || '').toLowerCase().includes('early') && empTime.startsWith('08:30')) return true;
-    return true;
   }
 
   return true;
@@ -373,19 +395,7 @@ const CoverageCell = ({
         </div>
       )}
       {hasCandidates && (
-        <div ref={dropdownRef} className="absolute -top-2 -right-2 z-20">
-          <button 
-            onClick={() => {
-              setShowDropdown(!showDropdown);
-              setCandidateToConfirm(null);
-              setShowTimeEdit(false);
-            }}
-            className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-md hover:bg-emerald-600 transition-colors border border-white"
-            title={`${availableCandidates.length} Available Staff`}
-          >
-            <span className="material-symbols-outlined text-[12px]">add</span>
-          </button>
-          
+        <div ref={dropdownRef} className="absolute top-0 right-0 z-20">
           {showDropdown && (
             <div className="absolute right-0 top-6 w-56 bg-white border border-slate-200 shadow-xl rounded-lg overflow-hidden z-30">
               <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 flex items-center gap-2">
@@ -394,74 +404,126 @@ const CoverageCell = ({
               </div>
               
               {candidateToConfirm ? (
-                <div className="p-3 bg-slate-50 flex flex-col gap-2">
-                  <p className="text-xs text-slate-700 leading-tight">
-                    Assign <span className="font-bold">{candidateToConfirm.users?.name}</span>?
-                  </p>
+                (() => {
+                  const isAdditional = candidateToConfirm.alreadyAssignedShifts && candidateToConfirm.alreadyAssignedShifts.length > 0;
+                  const isDefaultOverride = !isAdditional && candidateToConfirm.isTimeMismatch;
 
-                  <button 
-                    onClick={() => setShowTimeEdit(!showTimeEdit)}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 w-fit mt-1"
-                  >
-                    <span className="material-symbols-outlined text-[12px]">{showTimeEdit ? 'expand_less' : 'edit'}</span>
-                    {showTimeEdit ? 'Hide Time Options' : 'Edit Time (Partial Shift)'}
-                  </button>
+                  let overrideTitle = 'Confirm Assignment';
+                  let overrideBadgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                  let overrideIcon = 'person_add';
+                  let overrideMsg = `Assign ${candidateToConfirm.users?.name} to ${shiftCustomId}?`;
+                  let confirmBtnText = 'Confirm';
 
-                  {showTimeEdit && (
-                    <div className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 mt-1">
-                      <input 
-                        type="time" 
-                        value={customStart}
-                        onChange={(e) => setCustomStart(e.target.value)}
-                        className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
-                      />
-                      <span className="text-xs text-slate-400">-</span>
-                      <input 
-                        type="time" 
-                        value={customEnd}
-                        onChange={(e) => setCustomEnd(e.target.value)}
-                        className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
-                      />
+                  if (isAdditional) {
+                    overrideTitle = 'Additional Shift Override';
+                    overrideBadgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+                    overrideIcon = 'warning';
+                    const shiftsList = candidateToConfirm.alreadyAssignedShifts.join(', ');
+                    overrideMsg = `${candidateToConfirm.users?.name} is already assigned to ${shiftsList} today. Assign to additional shift (${shiftCustomId})?`;
+                    confirmBtnText = 'Confirm Additional Shift';
+                  } else if (isDefaultOverride) {
+                    overrideTitle = 'Default Shift Override';
+                    overrideBadgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-200';
+                    overrideIcon = 'edit_calendar';
+                    const empShift = candidateToConfirm.shift_time || 'flexible';
+                    overrideMsg = `${candidateToConfirm.users?.name}'s standard shift (${empShift}) differs from ${shiftCustomId}. Override default shift and assign?`;
+                    confirmBtnText = 'Confirm Shift Override';
+                  }
+
+                  return (
+                    <div className="p-3 bg-slate-50 flex flex-col gap-2">
+                      <div className={`px-2 py-1 rounded border text-[11px] font-bold flex items-center gap-1.5 ${overrideBadgeClass}`}>
+                        <span className="material-symbols-outlined text-[13px]">{overrideIcon}</span>
+                        {overrideTitle}
+                      </div>
+
+                      <p className="text-xs text-slate-700 leading-tight">
+                        {overrideMsg}
+                      </p>
+
+                      <button 
+                        onClick={() => setShowTimeEdit(!showTimeEdit)}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 w-fit mt-1"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">{showTimeEdit ? 'expand_less' : 'edit'}</span>
+                        {showTimeEdit ? 'Hide Time Options' : 'Edit Time (Partial Shift)'}
+                      </button>
+
+                      {showTimeEdit && (
+                        <div className="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 mt-1">
+                          <input 
+                            type="time" 
+                            value={customStart}
+                            onChange={(e) => setCustomStart(e.target.value)}
+                            className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
+                          />
+                          <span className="text-xs text-slate-400">-</span>
+                          <input 
+                            type="time" 
+                            value={customEnd}
+                            onChange={(e) => setCustomEnd(e.target.value)}
+                            className="w-full text-xs p-1 border border-slate-300 rounded focus:border-blue-500 outline-none" 
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 mt-2">
+                        <button 
+                          onClick={() => {
+                            setCandidateToConfirm(null);
+                            setShowTimeEdit(false);
+                          }}
+                          className="flex-1 px-2 py-1.5 bg-white border border-slate-300 text-slate-700 text-[10px] font-bold rounded hover:bg-slate-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (onAssign) onAssign(candidateToConfirm, customStart, customEnd);
+                            setShowDropdown(false);
+                            setCandidateToConfirm(null);
+                            setShowTimeEdit(false);
+                          }}
+                          className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded hover:bg-blue-700 transition-colors shadow-sm text-center leading-tight"
+                        >
+                          {confirmBtnText}
+                        </button>
+                      </div>
                     </div>
-                  )}
-
-                  <div className="flex gap-2 mt-2">
-                    <button 
-                      onClick={() => {
-                        setCandidateToConfirm(null);
-                        setShowTimeEdit(false);
-                      }}
-                      className="flex-1 px-2 py-1.5 bg-white border border-slate-300 text-slate-700 text-[10px] font-bold rounded hover:bg-slate-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (onAssign) onAssign(candidateToConfirm, customStart, customEnd);
-                        setShowDropdown(false);
-                        setCandidateToConfirm(null);
-                        setShowTimeEdit(false);
-                      }}
-                      className="flex-1 px-2 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
-                    >
-                      Confirm
-                    </button>
-                  </div>
-                </div>
+                  );
+                })()
               ) : (
                 <div className="max-h-48 overflow-y-auto py-1">
                   {availableCandidates.map((cand, idx) => (
                     <button 
                       key={idx}
                       onClick={() => setCandidateToConfirm(cand)}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2 group border-b border-slate-50 last:border-0"
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center justify-between group border-b border-slate-50 last:border-0"
                     >
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold shrink-0">
-                        {cand.users?.name?.charAt(0) || '?'}
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold shrink-0">
+                          {cand.users?.name?.charAt(0) || '?'}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-semibold text-slate-700 truncate group-hover:text-blue-600 transition-colors">
+                            {cand.users?.name}
+                          </span>
+                          {cand.alreadyAssignedShifts && cand.alreadyAssignedShifts.length > 0 && (
+                            <span className="text-[9px] font-bold text-amber-600 truncate">
+                              Assigned to {cand.alreadyAssignedShifts[0]}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-xs font-semibold text-slate-700 truncate group-hover:text-blue-600 transition-colors">
-                        {cand.users?.name}
-                      </span>
+                      {cand.alreadyAssignedShifts && cand.alreadyAssignedShifts.length > 0 ? (
+                        <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">
+                          +Shift
+                        </span>
+                      ) : cand.isTimeMismatch ? (
+                        <span className="text-[9px] font-extrabold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 shrink-0">
+                          Override
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -546,8 +608,17 @@ const CoverageCell = ({
         {uncoveredIntervals.map((interval, missingIdx) => {
           const isFull = interval.isFull || (shiftTime && shiftTime.includes('-') && interval.start === timeToMinutes(shiftTime.split('-')[0]) && interval.end === timeToMinutes(shiftTime.split('-')[1]));
           return (
-            <div key={`missing-${missingIdx}`} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded">
-              <span className="material-symbols-outlined text-[14px] text-rose-500">warning</span>
+            <div 
+              key={`missing-${missingIdx}`} 
+              onClick={() => {
+                setShowDropdown(!showDropdown);
+                setCandidateToConfirm(null);
+                setShowTimeEdit(false);
+              }}
+              className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 border-dashed p-1.5 rounded cursor-pointer hover:bg-rose-100/70 hover:border-rose-300 transition-all group/slot"
+              title="Click to select staff for this unfilled slot"
+            >
+              <span className="material-symbols-outlined text-[14px] text-rose-500 group-hover/slot:scale-110 transition-transform">add_circle</span>
               <span className="font-semibold text-rose-700 text-xs italic">
                 {isFull ? 'Unfilled Slot' : `Unfilled: ${formatMinutesToTime(interval.start)} - ${formatMinutesToTime(interval.end)}`}
               </span>
@@ -592,6 +663,7 @@ export default function Scheduler() {
   const [weeklyAssignments, setWeeklyAssignments] = useState({});
   const [employeeAssignments, setEmployeeAssignments] = useState({});
   const [weekDates, setWeekDates] = useState([]);
+  const [weeklyTimeOffData, setWeeklyTimeOffData] = useState([]);
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
 
@@ -661,6 +733,38 @@ export default function Scheduler() {
     let autoAssignedCount = 0;
 
     try {
+      // 1. Purge incompatible DB assignments for the current week first
+      if (weekDates.length > 0) {
+        const startDateStr = weekDates[0].toISOString().split('T')[0];
+        const endDateStr = weekDates[6].toISOString().split('T')[0];
+
+        const { data: existingWeekShifts } = await supabase
+          .from('shifts')
+          .select('id, date, time_block, start_time, end_time, shift_assignments(id, user_id)')
+          .eq('location_id', selectedClinicId)
+          .gte('date', startDateStr)
+          .lte('date', endDateStr);
+
+        if (existingWeekShifts && existingWeekShifts.length > 0) {
+          for (const s of existingWeekShifts) {
+            const targetShiftDef = shifts.find(sh => sh.custom_id === s.time_block) || s;
+            if (s.shift_assignments && s.shift_assignments.length > 0) {
+              for (const sa of s.shift_assignments) {
+                const emp = employees.find(e => e.user_id === sa.user_id);
+                if (emp) {
+                  const cycleIdx = getCycleDayIndex(new Date(s.date + 'T12:00:00Z'));
+                  const empPattern = parsePattern(emp.schedule_pattern);
+                  const empVal = empPattern && empPattern.length === 14 ? empPattern[cycleIdx] : false;
+                  if (empVal === false || empVal === null || empVal === undefined || !checkShiftTimeCompatibility(empVal, emp.shift_time, null, targetShiftDef)) {
+                    await supabase.from('shift_assignments').delete().eq('id', sa.id);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       for (const dateObj of weekDates) {
         const dateStr = dateObj.toISOString().split('T')[0];
         const cycleDayIndex = getCycleDayIndex(dateObj);
@@ -680,6 +784,10 @@ export default function Scheduler() {
             if (!empPattern || empPattern.length !== 14) return false;
             const empVal = empPattern[cycleDayIndex];
             if (empVal === false || empVal === null || empVal === undefined) return false;
+
+            // Must not be on approved time off on this date
+            const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+            if (isOnPTO) return false;
 
             // Shift time matching
             if (!checkShiftTimeCompatibility(empVal, emp.shift_time, shiftVal, shift)) return false;
@@ -848,58 +956,51 @@ export default function Scheduler() {
     return dateStr;
   };
 
+  const handleUnpublishSchedule = async () => {
+    try {
+      setLoading(true);
+      // Clear all schedule publication entries from localStorage
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('schedule_pub_')) {
+          localStorage.removeItem(key);
+        }
+      }
+
+      try {
+        await supabase
+          .from('schedule_publications')
+          .delete()
+          .neq('status', 'nonexistent_status_to_delete_all');
+      } catch (e) {}
+
+      setPublishStatus('draft');
+      setPublishedMeta(null);
+      showToastNotification('Schedules have been unpublished and reset to Draft status!', 'info');
+    } catch (err) {
+      console.error('Unpublish error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchPublicationStatus = async (clinicId, dateStr) => {
     if (!clinicId || !dateStr) return;
     const weekStart = getWeekStartStr(dateStr);
     const localKey = `schedule_pub_${clinicId}_${weekStart}`;
     
     try {
-      const { data, error } = await supabase
-        .from('schedule_publications')
-        .select('*')
-        .eq('location_id', clinicId)
-        .eq('week_start_date', weekStart)
-        .maybeSingle();
-
-      if (error) {
-        const stored = localStorage.getItem(localKey);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setPublishStatus(parsed.status || 'draft');
-          setPublishedMeta(parsed);
-        } else {
-          setPublishStatus('draft');
-          setPublishedMeta(null);
-        }
-        return;
-      }
-
-      if (data && data.status) {
-        setPublishStatus(data.status);
-        setPublishedMeta(data);
-        localStorage.setItem(localKey, JSON.stringify(data));
-      } else {
-        const stored = localStorage.getItem(localKey);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setPublishStatus(parsed.status || 'draft');
-          setPublishedMeta(parsed);
-        } else {
-          setPublishStatus('draft');
-          setPublishedMeta(null);
+      localStorage.removeItem(localKey);
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('schedule_pub_')) {
+          localStorage.removeItem(key);
         }
       }
-    } catch (err) {
-      const stored = localStorage.getItem(localKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setPublishStatus(parsed.status || 'draft');
-        setPublishedMeta(parsed);
-      } else {
-        setPublishStatus('draft');
-        setPublishedMeta(null);
-      }
-    }
+    } catch (e) {}
+
+    setPublishStatus('draft');
+    setPublishedMeta(null);
   };
 
   const handleExecutePublish = async () => {
@@ -956,10 +1057,14 @@ export default function Scheduler() {
     if (!pattern || pattern.length !== 14) return 0;
     let count = 0;
     weekDates.forEach(dateObj => {
-      const idx = getCycleDayIndex(dateObj);
-      const val = pattern[idx];
-      if (val !== false && val !== null && val !== undefined) {
-        count++;
+      const dateStr = formatLocalDate(dateObj);
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+      if (!isOnPTO) {
+        const idx = getCycleDayIndex(dateObj);
+        const val = pattern[idx];
+        if (val !== false && val !== null && val !== undefined) {
+          count++;
+        }
       }
     });
     return count;
@@ -993,6 +1098,10 @@ export default function Scheduler() {
   const isEmpScheduledToday = (emp) => {
     const pattern = parsePattern(emp.schedule_pattern);
     if (!pattern || pattern.length !== 14) return false;
+    if (selectedDate) {
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= selectedDate && t.end_date >= selectedDate);
+      if (isOnPTO) return false;
+    }
     const dayVal = pattern[currentCycleDayIndex];
     return dayVal !== false && dayVal !== null && dayVal !== undefined;
   };
@@ -1096,6 +1205,12 @@ export default function Scheduler() {
       const dateStr = typeof dateObj === 'string' ? dateObj : dateObj.toISOString().split('T')[0];
       const assignedEmp = employees.find(e => e.user_id === userId);
       const empName = assignedEmp?.users?.name || 'Staff';
+
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === userId && t.start_date <= dateStr && t.end_date >= dateStr);
+      if (isOnPTO) {
+        showToastNotification(`Cannot assign ${empName}: Employee has approved time off on ${dateStr}.`, 'error');
+        return;
+      }
 
       if (publishStatus === 'published' && !isConfirmed) {
         setPublishedConfirmModal({
@@ -1243,8 +1358,13 @@ export default function Scheduler() {
       if (rolesError) throw rolesError;
       setAvailableRoles(rolesData?.map(r => r.name).sort() || []);
 
+      const schedulableEmployees = (empsData || []).filter(emp => {
+        const role = (emp.staffing_role || emp.job_title || '').toUpperCase();
+        return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
+      });
+
       setShifts(shiftsData || []);
-      setEmployees(empsData || []);
+      setEmployees(schedulableEmployees);
       // fetchAdhocAndCalculate will be triggered by useEffect when states update
 
     } catch (err) {
@@ -1276,6 +1396,8 @@ export default function Scheduler() {
       .eq('status', 'approved')
       .lte('start_date', endDate)
       .gte('end_date', startDate);
+
+    setWeeklyTimeOffData(timeOffData || []);
 
     const { data: availabilityData } = await supabase
       .from('employee_availability')
@@ -1369,7 +1491,7 @@ export default function Scheduler() {
       // Update employee isActive state for this day
       currentEmployees.forEach(emp => {
         const dateStr = dateObj.toISOString().split('T')[0];
-        const fullTimeOffs = timeOffData.filter(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
+        const fullTimeOffs = timeOffData.filter(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
         const hasFullTimeOff = fullTimeOffs.length > 0;
 
         let pattern = parsePattern(emp.schedule_pattern);
@@ -1396,80 +1518,86 @@ export default function Scheduler() {
             ? `${shift.start_time.slice(0,5)}-${shift.end_time.slice(0,5)}` 
             : shift.time_block;
 
-        // Find eligible employees
-        let eligible = currentEmployees.filter(emp => {
-          let pattern = parsePattern(emp.schedule_pattern);
-          // Must be scheduled to work
-          if (!pattern || pattern.length !== 14) return false;
-          
-          const empVal = pattern[cycleDayIndex];
-          if (empVal === false || empVal === null || empVal === undefined) return false;
+        // Find eligible employees strictly from persisted database assignments or adhoc assignments.
+        // Un-generated weeks default to BLANK until Auto-Generate Schedule is run or staff are manually assigned.
+        let eligible = [];
 
-          // Shift time matching
-          if (!checkShiftTimeCompatibility(empVal, emp.shift_time, shiftVal, shift)) return false;
-
-          // Must match role
-          const primaryRole = (emp.staffing_role || '').trim();
-          const shiftRole = (shift.staffing_role || '').trim();
-          const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
-          
-          if (primaryRole !== shiftRole && !hasSecondary) return false;
-
-          // Must be authorized for this clinic
-          const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
-          if (!authorizedClinics.includes(selectedClinicId)) return false;
-
-          // Must not be on time off
-          if (newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff) return false;
-          
-          // Must not be already assigned
-          if (assignedEmployeeIds.has(emp.id)) return false;
-
-          return true;
-        });
-
-        // Check for template overrides (manual assignment/unassignment to a template shift)
         if (!shift._isAdhoc && templateOverrides && templateOverrides[shift.custom_id]) {
-          const dateStr = dateObj.toISOString().split('T')[0];
+          const dateStr = formatLocalDate(dateObj);
           const overridenAssignments = templateOverrides[shift.custom_id][dateStr];
           if (overridenAssignments !== undefined) {
             if (overridenAssignments.length > 0) {
               const overridenUserIds = overridenAssignments.map(o => o.user_id);
               const overridenEmps = currentEmployees.filter(e => overridenUserIds.includes(e.user_id));
-              eligible = overridenEmps;
+              eligible = overridenEmps.filter(e => {
+                // Only filter out full-day PTO for forced/persisted assignments
+                if (newEmployeeAssignments[e.id].days[dayIndex].isTimeOff) return false;
+                return true;
+              });
             } else {
               // Explicitly cleared / unassigned shift override!
               eligible = [];
             }
+          }
+        } else if (shift._isAdhoc && shift._assignedUserId) {
+          const assignedAdhocEmp = currentEmployees.find(e => e.user_id === shift._assignedUserId);
+          if (assignedAdhocEmp) {
+            eligible = [assignedAdhocEmp];
           }
         }
 
         // Sort alphabetically by name
         eligible.sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || ''));
 
-        let availableCandidates = [];
-        const dateStr = dateObj.toISOString().split('T')[0];
-        const availForDay = availabilityData.filter(a => a.date === dateStr);
-        if (availForDay.length > 0) {
-          availableCandidates = currentEmployees.filter(emp => {
-            if (assignedEmployeeIds.has(emp.id)) return false;
-            
-            const primaryRole = (emp.staffing_role || '').trim();
-            const shiftRole = (shift.staffing_role || '').trim();
-            const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
-            if (primaryRole !== shiftRole && !hasSecondary) return false;
+        const dateStr = formatLocalDate(dateObj);
+        const shiftRole = (shift.staffing_role || '').trim();
 
-            const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
-            if (!authorizedClinics.includes(selectedClinicId)) return false;
-
-            if (newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff) return false;
-
-            const availRecord = availForDay.find(avail => avail.user_id === emp.user_id);
-            if (!availRecord) return false;
-
-            return true;
+        // Build a map of shifts assigned per user_id on this dateStr
+        const assignedShiftsMapByEmp = {};
+        if (templateOverrides) {
+          Object.keys(templateOverrides).forEach(blockKey => {
+            const dateDict = templateOverrides[blockKey];
+            if (dateDict && dateDict[dateStr] && Array.isArray(dateDict[dateStr])) {
+              dateDict[dateStr].forEach(item => {
+                if (!assignedShiftsMapByEmp[item.user_id]) assignedShiftsMapByEmp[item.user_id] = [];
+                if (!assignedShiftsMapByEmp[item.user_id].includes(blockKey)) {
+                  assignedShiftsMapByEmp[item.user_id].push(blockKey);
+                }
+              });
+            }
           });
         }
+
+        let availableCandidates = currentEmployees.filter(emp => {
+          // Must match role (primary or secondary)
+          const primaryRole = (emp.staffing_role || '').trim();
+          const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
+          if (primaryRole !== shiftRole && !hasSecondary) return false;
+
+          // Must be authorized for clinic
+          const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
+          if (!authorizedClinics.includes(selectedClinicId)) return false;
+
+          // Must not be on full-day PTO on this date
+          if (newEmployeeAssignments[emp.id].days[dayIndex].isTimeOff) return false;
+
+          // Exclude if ALREADY assigned to THIS exact shift custom_id on this date
+          const currentShiftAssigned = assignedShiftsMapByEmp[emp.user_id] || [];
+          if (currentShiftAssigned.includes(shift.custom_id)) return false;
+
+          return true;
+        }).map(emp => {
+          const otherShifts = assignedShiftsMapByEmp[emp.user_id] || [];
+          let empPattern = parsePattern(emp.schedule_pattern);
+          const empVal = empPattern && empPattern.length === 14 ? empPattern[cycleDayIndex] : false;
+          const isTimeMatch = checkShiftTimeCompatibility(empVal, emp.shift_time, shiftVal, shift);
+
+          return {
+            ...emp,
+            alreadyAssignedShifts: otherShifts,
+            isTimeMismatch: !isTimeMatch
+          };
+        });
 
         if (eligible.length > 0) {
           const needed = shift.required_count || 1;
@@ -1595,15 +1723,17 @@ export default function Scheduler() {
             <div className="flex flex-col items-start">
               <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Schedule Status</span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleAutoGenerateSchedule}
-                  disabled={autoGenerating}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-300 disabled:opacity-50"
-                  title="Auto-generate schedule from 14-day templates"
-                >
-                  <span className="material-symbols-outlined text-sm">auto_awesome</span>
-                  {autoGenerating ? 'Generating...' : 'Auto-Generate Schedule'}
-                </button>
+                {publishStatus !== 'published' && (
+                  <button
+                    onClick={handleAutoGenerateSchedule}
+                    disabled={autoGenerating}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-300 disabled:opacity-50"
+                    title="Auto-generate schedule from 14-day templates"
+                  >
+                    <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                    {autoGenerating ? 'Generating...' : 'Auto-Generate Schedule'}
+                  </button>
+                )}
 
                 {publishStatus === 'published' ? (
                   <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-xs">

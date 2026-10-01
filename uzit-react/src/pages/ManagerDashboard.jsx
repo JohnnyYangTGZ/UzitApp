@@ -49,11 +49,18 @@ export default function ManagerDashboard() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay()); // 0-6 (Sun-Sat)
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('All Staff');
+  const [activeDropdown, setActiveDropdown] = useState(null); // { dayIdx, role }
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [denyModalRequest, setDenyModalRequest] = useState(null);
   const [denyNote, setDenyNote] = useState('');
   const [isSubmittingDenial, setIsSubmittingDenial] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = () => setActiveDropdown(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const fetchPendingRequests = async () => {
     if (!selectedClinicId) return;
@@ -245,8 +252,10 @@ export default function ManagerDashboard() {
             users:user_id ( id, name )
           `)
           .in('user_id', userIds)
-          .eq('is_active', true);
-        profiles = profs || [];
+        profiles = (profs || []).filter(p => {
+          const role = (p.staffing_role || p.job_title || '').toUpperCase();
+          return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
+        });
       }
 
       // 3. Fetch Time Off for the whole week
@@ -449,24 +458,98 @@ export default function ManagerDashboard() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-on-surface-variant font-medium">RN</span>
-                      <span className={day.actual.RN < day.required.RN ? 'text-error font-bold' : 'text-status-approved font-bold'}>
-                        {day.actual.RN} <span className="text-xs font-normal text-slate-400">/ {day.required.RN}</span>
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-on-surface-variant font-medium">LVN</span>
-                      <span className={day.actual.LVN < day.required.LVN ? 'text-error font-bold' : 'text-status-approved font-bold'}>
-                        {day.actual.LVN} <span className="text-xs font-normal text-slate-400">/ {day.required.LVN}</span>
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-on-surface-variant font-medium">MA</span>
-                      <span className={day.actual.MA < day.required.MA ? 'text-error font-bold' : 'text-status-approved font-bold'}>
-                        {day.actual.MA} <span className="text-xs font-normal text-slate-400">/ {day.required.MA}</span>
-                      </span>
-                    </div>
+                    {['RN', 'LVN', 'MA'].map(role => {
+                      const actualCount = day.actual[role] || 0;
+                      const requiredCount = day.required[role] || 0;
+                      const isDeficit = actualCount < requiredCount;
+                      const isOpen = activeDropdown?.dayIdx === idx && activeDropdown?.role === role;
+
+                      const roleStaff = (dashboardData.rosterByDay[idx] || []).filter(st => {
+                        if (st.isOff) return false;
+                        const r = (st.staffing_role || '').toUpperCase().trim();
+                        if (role === 'RN') return r === 'RN' || r === 'REGISTERED NURSE';
+                        if (role === 'LVN') return r === 'LVN' || r === 'LICENSED VOCATIONAL NURSE';
+                        if (role === 'MA') return r === 'MA' || r === 'MEDICAL ASSISTANT';
+                        return r === role;
+                      });
+
+                      return (
+                        <div key={role} className="relative flex justify-between items-center text-sm py-0.5">
+                          <span className="text-on-surface-variant font-medium">{role}</span>
+                          
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveDropdown(isOpen ? null : { dayIdx: idx, role });
+                            }}
+                            className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-0.5 cursor-pointer font-bold ${
+                              isOpen ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-400' : 'hover:bg-blue-50/70 hover:text-blue-700'
+                            } ${isDeficit ? 'text-error' : 'text-status-approved'}`}
+                            title={`Click for quick view of ${role} staff working on ${day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                          >
+                            <span>{actualCount}</span>
+                            <span className="text-xs font-normal text-slate-400">/ {requiredCount}</span>
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">arrow_drop_down</span>
+                          </button>
+
+                          {/* Who's Working Dropdown Popover */}
+                          {isOpen && (
+                            <div 
+                              className="absolute right-0 top-7 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-100 text-left cursor-default"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-sm text-blue-600">group</span>
+                                    Who's Working Today
+                                  </h4>
+                                  <p className="text-[10px] text-slate-500 font-medium">
+                                    {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {role} ({roleStaff.length})
+                                  </p>
+                                </div>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveDropdown(null);
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+                                  title="Close"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">close</span>
+                                </button>
+                              </div>
+
+                              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                                {roleStaff.length > 0 ? (
+                                  roleStaff.map((st, i) => (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs hover:bg-blue-50/50 transition-colors">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                                          {st.users?.name?.charAt(0) || '?'}
+                                        </div>
+                                        <div className="truncate">
+                                          <p className="font-bold text-slate-800 truncate">{st.users?.name || 'Staff'}</p>
+                                          <p className="text-[10px] text-slate-500 truncate">{st.effectiveShiftTime || 'Scheduled'}</p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                        {role}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="p-3 text-center text-slate-400 text-xs italic">
+                                    No {role} staff scheduled for this date.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   
                   {/* Progress bar indicator */}

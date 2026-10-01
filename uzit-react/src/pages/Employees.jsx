@@ -36,13 +36,37 @@ export default function Employees() {
     clinics: [], // Array of clinic_ids
     secondary_roles: [], // Array of secondary role strings
     systemRole: 'staff',
-    newPassword: ''
+    newPassword: '',
+    sick_leave_accrual_date: '',
+    sick_leave_accrual_amount: '',
+    vacation_accrual_rate: ''
   });
+
+  const getAccrualInfo = (emp) => {
+    if (!emp) return { sick_leave_accrual_date: '', sick_leave_accrual_amount: '', vacation_accrual_rate: '' };
+    let sDate = emp.sick_leave_accrual_date;
+    let sAmount = emp.sick_leave_accrual_amount;
+    let vRate = emp.vacation_accrual_rate;
+
+    try {
+      const localData = JSON.parse(localStorage.getItem(`accrual_${emp.user_id}`) || '{}');
+      if (sDate === undefined || sDate === null) sDate = localData.sick_leave_accrual_date;
+      if (sAmount === undefined || sAmount === null) sAmount = localData.sick_leave_accrual_amount;
+      if (vRate === undefined || vRate === null) vRate = localData.vacation_accrual_rate;
+    } catch(e) {}
+
+    return {
+      sick_leave_accrual_date: sDate || '',
+      sick_leave_accrual_amount: sAmount !== undefined && sAmount !== null ? sAmount : '',
+      vacation_accrual_rate: vRate !== undefined && vRate !== null ? vRate : ''
+    };
+  };
 
   async function loadEmployees() {
     if (!selectedDepartmentId) return;
     setLoading(true);
-    const { data, error } = await supabase
+
+    let { data, error } = await supabase
       .from('employee_profiles')
       .select(`
         user_id,
@@ -55,6 +79,9 @@ export default function Employees() {
         is_on_call,
         secondary_roles,
         company_start_date,
+        sick_leave_accrual_date,
+        sick_leave_accrual_amount,
+        vacation_accrual_rate,
         users!employee_profiles_user_id_fkey!inner (
           id,
           name,
@@ -70,9 +97,46 @@ export default function Employees() {
       .order('employee_code');
 
     if (error) {
-      console.error('Error fetching employees:', error);
-      setErrorMsg(error.message || JSON.stringify(error));
-    } else if (data) {
+      // Fallback query if accrual columns do not exist in DB schema
+      const fallback = await supabase
+        .from('employee_profiles')
+        .select(`
+          user_id,
+          employee_code,
+          job_title,
+          staffing_role,
+          phone_number,
+          shift_time,
+          schedule_pattern,
+          is_on_call,
+          secondary_roles,
+          company_start_date,
+          users!employee_profiles_user_id_fkey!inner (
+            id,
+            name,
+            email,
+            role,
+            employee_clinics (
+              clinic_id,
+              locations ( id, name, parent_location_id )
+            )
+          )
+        `)
+        .eq('department_id', selectedDepartmentId)
+        .order('employee_code');
+        
+      data = fallback.data;
+      if (fallback.error) {
+        console.error('Error fetching employees:', fallback.error);
+        setErrorMsg(fallback.error.message || JSON.stringify(fallback.error));
+      } else {
+        setErrorMsg('');
+      }
+    } else {
+      setErrorMsg('');
+    }
+
+    if (data) {
       const sortedData = [...data].sort((a, b) => {
         const nameA = a.users?.name || '';
         const nameB = b.users?.name || '';
@@ -108,9 +172,21 @@ export default function Employees() {
       .select('name, description')
       .eq('department_id', selectedDepartmentId)
       .eq('is_active', true);
-    if (!error && data) {
-      setAvailableRoles(data.sort((a,b) => a.name.localeCompare(b.name)));
-    }
+
+    let rolesList = data ? [...data] : [];
+
+    const defaultAdminRoles = [
+      { name: 'ADMIN', description: 'System Administrator (Non-Scheduled)' },
+      { name: 'MANAGER', description: 'Clinic Manager (Non-Scheduled)' }
+    ];
+
+    defaultAdminRoles.forEach(ar => {
+      if (!rolesList.some(r => r.name.toUpperCase() === ar.name)) {
+        rolesList.push(ar);
+      }
+    });
+
+    setAvailableRoles(rolesList.sort((a,b) => a.name.localeCompare(b.name)));
   }
 
   const getRoleDescription = (roleName) => {
@@ -135,7 +211,10 @@ export default function Employees() {
         secondary_roles: [],
         systemRole: 'staff',
         newPassword: '',
-        seniority_date: ''
+        seniority_date: '',
+        sick_leave_accrual_date: '',
+        sick_leave_accrual_amount: '',
+        vacation_accrual_rate: ''
       });
       setIsCreating(true);
       setIsEditing(true);
@@ -156,6 +235,8 @@ export default function Employees() {
       .map(ec => ec.clinic_id || ec.locations?.id)
       .filter(Boolean);
 
+    const accrualInfo = getAccrualInfo(selectedEmployee);
+
     setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
     setEditForm({
       firstName,
@@ -170,7 +251,10 @@ export default function Employees() {
       secondary_roles: selectedEmployee.secondary_roles || [],
       systemRole: selectedEmployee.users?.role || 'staff',
       newPassword: '',
-      seniority_date: selectedEmployee.company_start_date || selectedEmployee.seniority_date || ''
+      seniority_date: selectedEmployee.company_start_date || selectedEmployee.seniority_date || '',
+      sick_leave_accrual_date: accrualInfo.sick_leave_accrual_date,
+      sick_leave_accrual_amount: accrualInfo.sick_leave_accrual_amount,
+      vacation_accrual_rate: accrualInfo.vacation_accrual_rate
     });
     setIsEditing(true);
   };
@@ -240,27 +324,45 @@ export default function Employees() {
       }
 
       // Create profile
+      const profileInsertData = {
+        user_id: newUser.id,
+        department_id: selectedDepartmentId,
+        employee_code: `${editForm.staffing_role}-${Math.floor(Math.random() * 1000)}`,
+        job_title: `${getRoleDescription(editForm.staffing_role)}${editForm.is_on_call ? ' (on-call)' : ''}`,
+        phone_number: editForm.phone_number,
+        staffing_role: editForm.staffing_role,
+        shift_time: editForm.shift_time,
+        is_on_call: editForm.is_on_call,
+        schedule_pattern: editForm.schedulePattern,
+        secondary_roles: editForm.secondary_roles,
+        company_start_date: editForm.seniority_date
+      };
+
       const { error: profileError } = await supabase
         .from('employee_profiles')
-        .insert({
-          user_id: newUser.id,
-          department_id: selectedDepartmentId,
-          employee_code: `${editForm.staffing_role}-${Math.floor(Math.random() * 1000)}`,
-          job_title: `${getRoleDescription(editForm.staffing_role)}${editForm.is_on_call ? ' (on-call)' : ''}`,
-          phone_number: editForm.phone_number,
-          staffing_role: editForm.staffing_role,
-          shift_time: editForm.shift_time,
-          is_on_call: editForm.is_on_call,
-          schedule_pattern: editForm.schedulePattern,
-          secondary_roles: editForm.secondary_roles,
-          company_start_date: editForm.seniority_date
-        });
+        .insert(profileInsertData);
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
         alert('Failed to create profile: ' + profileError.message);
         return;
       }
+
+      // Save accrual data to localStorage & attempt DB update
+      const targetUserId = newUser.id;
+      const accrualObj = {
+        sick_leave_accrual_date: editForm.sick_leave_accrual_date || '',
+        sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? editForm.sick_leave_accrual_amount : '',
+        vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? editForm.vacation_accrual_rate : ''
+      };
+      localStorage.setItem(`accrual_${targetUserId}`, JSON.stringify(accrualObj));
+      try {
+        await supabase.from('employee_profiles').update({
+          sick_leave_accrual_date: editForm.sick_leave_accrual_date || null,
+          sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? parseFloat(editForm.sick_leave_accrual_amount) : null,
+          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null
+        }).eq('user_id', targetUserId);
+      } catch (e) {}
 
       // Insert clinics
       if (editForm.clinics.length > 0) {
@@ -311,6 +413,22 @@ export default function Employees() {
         alert('Failed to update profile: ' + profileError.message);
         return;
       }
+
+      // Save accrual data to localStorage & attempt DB update
+      const targetUserId = selectedEmployee.user_id;
+      const accrualObj = {
+        sick_leave_accrual_date: editForm.sick_leave_accrual_date || '',
+        sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? editForm.sick_leave_accrual_amount : '',
+        vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? editForm.vacation_accrual_rate : ''
+      };
+      localStorage.setItem(`accrual_${targetUserId}`, JSON.stringify(accrualObj));
+      try {
+        await supabase.from('employee_profiles').update({
+          sick_leave_accrual_date: editForm.sick_leave_accrual_date || null,
+          sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? parseFloat(editForm.sick_leave_accrual_amount) : null,
+          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null
+        }).eq('user_id', targetUserId);
+      } catch (e) {}
 
       // Update employee_clinics table
       // 1. Delete all existing for this user
@@ -396,6 +514,7 @@ export default function Employees() {
                   <tr>
                     <th className="px-6 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase border-b border-slate-200">Name</th>
                     <th className="px-6 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase border-b border-slate-200">Role</th>
+                    <th className="px-6 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase border-b border-slate-200">Seniority Date</th>
                     <th className="px-6 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase border-b border-slate-200">Shift</th>
                     <th className="px-6 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase border-b border-slate-200">Status</th>
                   </tr>
@@ -403,11 +522,11 @@ export default function Employees() {
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-8 text-center text-slate-500">Loading employees...</td>
+                      <td colSpan="5" className="px-6 py-8 text-center text-slate-500">Loading employees...</td>
                     </tr>
                   ) : errorMsg ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-8 text-center text-red-500 font-medium">Error: {errorMsg}</td>
+                      <td colSpan="5" className="px-6 py-8 text-center text-red-500 font-medium">Error: {errorMsg}</td>
                     </tr>
                   ) : filteredEmployees.length > 0 ? (
                     filteredEmployees.map(emp => {
@@ -465,7 +584,7 @@ export default function Employees() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan="4" className="px-6 py-8 text-center text-slate-500">No employees found for this filter/department.</td>
+                      <td colSpan="5" className="px-6 py-8 text-center text-slate-500">No employees found for this filter/department.</td>
                     </tr>
                   )}
                 </tbody>
@@ -475,7 +594,9 @@ export default function Employees() {
 
           {/* Datacard Area (Right) */}
           <div className="w-[450px] flex-shrink-0">
-            {selectedEmployee || isCreating ? (
+            {selectedEmployee || isCreating ? (() => {
+              const accruals = getAccrualInfo(selectedEmployee);
+              return (
               <div className="bg-white border border-surface-border rounded-xl shadow-md h-full flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300">
                 {/* Datacard Header */}
                 <div className="bg-slate-50 p-6 border-b border-slate-200 flex flex-col items-center text-center">
@@ -791,6 +912,86 @@ export default function Employees() {
                     </div>
                   </div>
 
+                  {/* Leave & Accrual Settings */}
+                  <div>
+                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Leave & Accrual Settings</h4>
+                    <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
+                      
+                      {/* Sick Leave Accrual Date & Amount */}
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Date</span>
+                          {isEditing ? (
+                            <input 
+                              type="date"
+                              value={editForm.sick_leave_accrual_date}
+                              onChange={e => setEditForm({ ...editForm, sick_leave_accrual_date: e.target.value })}
+                              className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[140px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                            />
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.sick_leave_accrual_date ? new Date(accruals.sick_leave_accrual_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Amount</span>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <input 
+                                type="number"
+                                step="any"
+                                placeholder="e.g. 24"
+                                value={editForm.sick_leave_accrual_amount}
+                                onChange={e => setEditForm({ ...editForm, sick_leave_accrual_amount: e.target.value })}
+                                className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[100px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                              />
+                              <span className="text-xs text-slate-500 font-medium">hrs</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.sick_leave_accrual_amount !== '' && accruals.sick_leave_accrual_amount !== null ? `${accruals.sick_leave_accrual_amount} hrs` : 'Not set'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic leading-snug">
+                          Starting on {editForm.sick_leave_accrual_date || accruals.sick_leave_accrual_date || 'MM/DD/YY'}, sick leave accrual will be {editForm.sick_leave_accrual_amount || accruals.sick_leave_accrual_amount || '0'} hrs.
+                        </p>
+                      </div>
+
+                      <hr className="border-slate-200" />
+
+                      {/* Vacation Accrual Rate */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-600">Vacation Accrual Rate</span>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <input 
+                                type="number"
+                                step="any"
+                                placeholder="e.g. 8.33"
+                                value={editForm.vacation_accrual_rate}
+                                onChange={e => setEditForm({ ...editForm, vacation_accrual_rate: e.target.value })}
+                                className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[110px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                              />
+                              <span className="text-xs text-slate-500 font-medium">hrs/month</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.vacation_accrual_rate !== '' && accruals.vacation_accrual_rate !== null ? `${accruals.vacation_accrual_rate} hrs/month` : 'Not set'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 italic leading-snug">
+                          Accrues at {editForm.vacation_accrual_rate || accruals.vacation_accrual_rate || '0.00'} hours per month every pay period.
+                        </p>
+                      </div>
+
+                    </div>
+                  </div>
+
                   {/* Schedule Pattern */}
                   <div>
                     <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">2-Week Schedule</h4>
@@ -866,7 +1067,8 @@ export default function Employees() {
                 </div>
 
               </div>
-            ) : (
+              );
+            })() : (
               <div className="h-full bg-slate-50 border border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 p-8 text-center">
                 <span className="material-symbols-outlined text-4xl mb-3 opacity-50">person_search</span>
                 <p className="font-medium text-slate-600">No employee selected</p>
