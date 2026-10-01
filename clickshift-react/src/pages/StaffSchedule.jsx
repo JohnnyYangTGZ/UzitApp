@@ -17,9 +17,69 @@ export default function StaffSchedule() {
   const [activeDateMenu, setActiveDateMenu] = useState(null);
   const [selectedDateForModal, setSelectedDateForModal] = useState('');
 
+  const [publicationsMap, setPublicationsMap] = useState({});
+
   // Derive start and end of the current month view
   const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+  const fetchPublications = async () => {
+    try {
+      const { data } = await supabase
+        .from('schedule_publications')
+        .select('*');
+
+      const pubMap = {};
+      if (data) {
+        data.forEach(p => {
+          if (p.status === 'published') {
+            pubMap[`${p.location_id}_${p.week_start_date}`] = true;
+          }
+        });
+      }
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('schedule_pub_')) {
+          try {
+            const val = JSON.parse(localStorage.getItem(key));
+            if (val && val.status === 'published') {
+              const parts = key.replace('schedule_pub_', '').split('_');
+              const clinicId = parts[0];
+              const weekStart = parts[1];
+              pubMap[`${clinicId}_${weekStart}`] = true;
+            }
+          } catch(e) {}
+        }
+      }
+
+      setPublicationsMap(pubMap);
+    } catch(err) {
+      console.warn("Could not fetch publications:", err);
+    }
+  };
+
+  const getWeekStartStr = (dateStr) => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    const targetDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+    const dayOfWeek = targetDate.getDay();
+    const startOfWeek = new Date(targetDate);
+    startOfWeek.setDate(targetDate.getDate() - dayOfWeek);
+    return `${startOfWeek.getFullYear()}-${String(startOfWeek.getMonth() + 1).padStart(2, '0')}-${String(startOfWeek.getDate()).padStart(2, '0')}`;
+  };
+
+  const isShiftPublished = (assignment) => {
+    if (!assignment || !assignment.shifts) return false;
+    const locationId = assignment.shifts.location?.id || assignment.shifts.location_id;
+    const dateStr = assignment.shifts.date;
+    if (!dateStr) return false;
+    const weekStart = getWeekStartStr(dateStr);
+    if (locationId && publicationsMap[`${locationId}_${weekStart}`]) {
+      return true;
+    }
+    return Object.keys(publicationsMap).some(k => k.endsWith(`_${weekStart}`));
+  };
 
   const fetchTimeOffs = async () => {
     if (!user) return;
@@ -46,6 +106,7 @@ export default function StaffSchedule() {
     });
     
     fetchTimeOffs();
+    fetchPublications();
   }, [user, currentDate, fetchMySchedule]);
 
   const formatTime = (timeStr) => {
@@ -221,45 +282,82 @@ export default function StaffSchedule() {
                     </div>
                   )}
 
-                  {day.shifts.map((assignment, idx) => (
-                    <div key={`shift-${idx}`} className="mt-2 bg-on-secondary-container text-white p-2 rounded text-xs font-medium">
-                      <p className="truncate mb-0.5">{assignment.shifts.location?.name}</p>
-                      <p className="opacity-80">
-                        {assignment.shifts.start_time && assignment.shifts.end_time
-                          ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
-                          : `${assignment.shifts.time_block} Shift`}
-                      </p>
-                    </div>
-                  ))}
+                  {(() => {
+                    const hasApprovedPTO = day.timeOffs.some(to => to.status === 'approved');
 
-                  {day.timeOffs.map((to, idx) => {
-                    const isApproved = to.status === 'approved';
-                    const isPending = to.status === 'pending';
-                    
-                    if (isApproved) {
-                      return (
-                        <div key={`to-${idx}`} className="mt-2 bg-green-50 border border-green-200 text-status-approved p-2 rounded text-xs font-medium">
-                          <p>{to.time_off_type_code}</p>
-                          <p className="opacity-80 text-[10px] uppercase">Approved</p>
-                        </div>
-                      );
-                    } else if (isPending) {
-                      return (
-                        <div key={`to-${idx}`} className="mt-2 bg-amber-50 border border-amber-200 text-status-pending p-2 rounded text-xs font-medium">
-                          <p>{to.time_off_type_code}</p>
-                          <p className="opacity-80 text-[10px] uppercase">Pending</p>
-                        </div>
-                      );
-                    } else {
-                      return null;
-                    }
-                  })}
-                  
-                  {day.isCurrentMonth && day.shifts.length === 0 && day.timeOffs.length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
-                     <div className="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
-                       <p>Off</p>
-                     </div>
-                  )}
+                    return (
+                      <>
+                        {/* Render Shifts ONLY if day has NO approved PTO */}
+                        {!hasApprovedPTO && day.shifts.map((assignment, idx) => {
+                          const published = isShiftPublished(assignment);
+                          return (
+                            <div 
+                              key={`shift-${idx}`} 
+                              className={`mt-2 p-2 rounded-lg text-xs font-medium transition-all shadow-xs border ${
+                                published 
+                                  ? 'bg-emerald-700 text-white border-emerald-600' 
+                                  : 'bg-slate-700 text-white border-slate-600'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <p className="font-bold truncate text-white">{assignment.shifts.location?.name || 'Clinic Shift'}</p>
+                                {published && (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Published Shift"></span>
+                                )}
+                              </div>
+                              <p className={published ? "text-emerald-100 text-[11px]" : "text-slate-300 text-[11px]"}>
+                                {assignment.shifts.start_time && assignment.shifts.end_time
+                                  ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
+                                  : `${assignment.shifts.time_block} Shift`}
+                              </p>
+                            </div>
+                          );
+                        })}
+
+                        {/* Render Time Off Requests (Approved or Pending) */}
+                        {day.timeOffs.map((to, idx) => {
+                          const isApproved = to.status === 'approved';
+                          const isPending = to.status === 'pending';
+                          
+                          if (isApproved) {
+                            return (
+                              <div 
+                                key={`to-${idx}`} 
+                                className="mt-2 bg-emerald-600 border border-emerald-500 text-white p-2 rounded-lg text-xs font-bold shadow-xs flex items-center justify-between"
+                              >
+                                <div>
+                                  <p className="font-extrabold">{to.time_off_type_code || 'VAC'}</p>
+                                  <p className="text-[10px] text-emerald-100 uppercase tracking-wider font-semibold">Approved</p>
+                                </div>
+                                <span className="material-symbols-outlined text-base text-emerald-100">check_circle</span>
+                              </div>
+                            );
+                          } else if (isPending) {
+                            return (
+                              <div 
+                                key={`to-${idx}`} 
+                                className="mt-2 bg-amber-50 border border-amber-300 text-amber-900 p-2 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-between"
+                              >
+                                <div>
+                                  <p className="font-bold">{to.time_off_type_code || 'VAC'}</p>
+                                  <p className="text-[10px] text-amber-700 uppercase tracking-wider font-extrabold">Pending</p>
+                                </div>
+                                <span className="material-symbols-outlined text-base text-amber-600">hourglass_top</span>
+                              </div>
+                            );
+                          } else {
+                            return null;
+                          }
+                        })}
+
+                        {day.isCurrentMonth && !hasApprovedPTO && day.shifts.length === 0 && day.timeOffs.length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
+                           <div className="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
+                             <p>Off</p>
+                           </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -270,17 +368,21 @@ export default function StaffSchedule() {
         <div className="mt-6 flex flex-col md:flex-row gap-6">
           <div className="bg-white p-6 rounded-xl border border-surface-border flex-1">
             <h3 className="font-h3 text-h3 mb-4">Calendar Legend</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-on-secondary-container"></div>
-                <span className="text-body-md">Working Shift</span>
+                <div className="w-4 h-4 rounded bg-slate-700 border border-slate-600"></div>
+                <span className="text-body-md">Draft Shift</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-green-50 border border-green-200"></div>
+                <div className="w-4 h-4 rounded bg-emerald-700 border border-emerald-600"></div>
+                <span className="text-body-md">Published Shift</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 rounded bg-emerald-600 border border-emerald-500"></div>
                 <span className="text-body-md">Approved PTO</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 rounded bg-amber-50 border border-amber-200"></div>
+                <div className="w-4 h-4 rounded bg-amber-50 border border-amber-300"></div>
                 <span className="text-body-md">Pending Request</span>
               </div>
               <div className="flex items-center gap-3">
