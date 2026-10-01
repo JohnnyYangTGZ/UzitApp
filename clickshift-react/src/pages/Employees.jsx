@@ -62,7 +62,7 @@ export default function Employees() {
           role,
           employee_clinics (
             clinic_id,
-            locations ( id, name )
+            locations ( id, name, parent_location_id )
           )
         )
       `)
@@ -150,8 +150,11 @@ export default function Employees() {
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
     
-    // Extract clinic IDs
-    const clinicIds = (selectedEmployee.users?.employee_clinics || []).map(ec => ec.clinic_id || ec.locations?.id).filter(Boolean);
+    // Extract clinic IDs (excluding top-level department)
+    const clinicIds = (selectedEmployee.users?.employee_clinics || [])
+      .filter(ec => ec.locations?.parent_location_id !== null && ec.clinic_id !== selectedDepartmentId)
+      .map(ec => ec.clinic_id || ec.locations?.id)
+      .filter(Boolean);
 
     setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
     setEditForm({
@@ -823,11 +826,13 @@ export default function Employees() {
                           );
                         })
                       ) : selectedEmployee?.users?.employee_clinics?.length > 0 ? (
-                        selectedEmployee.users.employee_clinics.map((ec, idx) => (
-                          <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-100 text-xs px-3 py-1.5 rounded-full font-medium">
-                            {ec.locations?.name || 'Unknown Clinic'}
-                          </span>
-                        ))
+                        selectedEmployee.users.employee_clinics
+                          .filter(ec => ec.locations?.parent_location_id !== null && ec.clinic_id !== selectedDepartmentId)
+                          .map((ec, idx) => (
+                            <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-100 text-xs px-3 py-1.5 rounded-full font-medium">
+                              {ec.locations?.name || 'Unknown Clinic'}
+                            </span>
+                          ))
                       ) : (
                         <span className="text-sm text-slate-500 italic">No clinic assignments.</span>
                       )}
