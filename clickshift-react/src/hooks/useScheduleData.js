@@ -62,6 +62,14 @@ export function useScheduleData() {
         }
       }
 
+      const { data: clinicShifts } = await supabase
+        .from('shifts')
+        .select('id, date, time_block, location_id')
+        .gte('date', startDate)
+        .lte('date', endDate);
+
+      const clinicShiftDates = new Set((clinicShifts || []).map(s => s.date));
+
       const { data: timeOffs } = await supabase
         .from('time_off_requests')
         .select('*')
@@ -93,6 +101,11 @@ export function useScheduleData() {
         }
         
         if (isTimeOffDay(dateStr)) continue;
+
+        // If manager has explicitly created/managed shifts for this date and employee is not assigned, respect unassignment
+        if (clinicShiftDates.has(dateStr)) {
+          continue;
+        }
         
         if (pattern && pattern.length === 14) {
           const cycleIdx = getCycleDayIndex(d);

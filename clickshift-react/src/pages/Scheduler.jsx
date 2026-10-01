@@ -609,9 +609,54 @@ export default function Scheduler() {
   const [publishing, setPublishing] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
+  const [publishedConfirmModal, setPublishedConfirmModal] = useState({
+    isOpen: false,
+    actionType: null,
+    actionPayload: null,
+    employeeName: '',
+    shiftName: '',
+    dateStr: ''
+  });
 
-  const handleAutoGenerateSchedule = async () => {
+  const executeConfirmedPublishedAction = () => {
+    if (!publishedConfirmModal.actionPayload) return;
+    const { actionType, actionPayload } = publishedConfirmModal;
+    setPublishedConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    if (actionType === 'UNASSIGN') {
+      handleRemoveAssignment(actionPayload.shiftCustomId, actionPayload.dateObj, actionPayload.userId, true);
+    } else if (actionType === 'ASSIGN') {
+      handleAssign(
+        actionPayload.shiftCustomId,
+        actionPayload.role,
+        actionPayload.defaultStartTime,
+        actionPayload.defaultEndTime,
+        actionPayload.dateObj,
+        actionPayload.userId,
+        actionPayload.customStartTime,
+        actionPayload.customEndTime,
+        true
+      );
+    } else if (actionType === 'AUTO_GENERATE') {
+      handleAutoGenerateSchedule(true);
+    }
+  };
+
+  const handleAutoGenerateSchedule = async (isConfirmed = false) => {
     if (!selectedClinicId || weekDates.length === 0) return;
+
+    if (publishStatus === 'published' && !isConfirmed) {
+      setPublishedConfirmModal({
+        isOpen: true,
+        actionType: 'AUTO_GENERATE',
+        actionPayload: {},
+        employeeName: 'All Staff',
+        shiftName: 'Auto-Generate Full Week Schedule',
+        dateStr: selectedDate
+      });
+      return;
+    }
+
     setAutoGenerating(true);
     let autoAssignedCount = 0;
 
@@ -936,10 +981,25 @@ export default function Scheduler() {
     return (a.users?.name || '').localeCompare(b.users?.name || '');
   });
 
-  const handleRemoveAssignment = async (shiftCustomId, dateObj, userId) => {
+  const handleRemoveAssignment = async (shiftCustomId, dateObj, userId, isConfirmed = false) => {
     try {
-      setLoading(true);
       const dateStr = typeof dateObj === 'string' ? dateObj : dateObj.toISOString().split('T')[0];
+      const unassignedEmp = employees.find(e => e.user_id === userId);
+      const empName = unassignedEmp?.users?.name || 'Staff';
+
+      if (publishStatus === 'published' && !isConfirmed) {
+        setPublishedConfirmModal({
+          isOpen: true,
+          actionType: 'UNASSIGN',
+          actionPayload: { shiftCustomId, dateObj, userId },
+          employeeName: empName,
+          shiftName: shiftCustomId,
+          dateStr
+        });
+        return;
+      }
+
+      setLoading(true);
 
       const { data: shiftsFound } = await supabase
         .from('shifts')
@@ -974,12 +1034,11 @@ export default function Scheduler() {
         if (createError) throw createError;
       }
 
-      const unassignedEmp = employees.find(e => e.user_id === userId);
-      const empName = unassignedEmp?.users?.name || 'Staff';
       showToastNotification(`Unassigned ${empName} from ${shiftCustomId}`, 'info');
 
       if (publishStatus === 'published') {
         triggerScheduleChangeNotification({ userId, action: 'UNASSIGNED', shiftCustomId, dateStr });
+        showToastNotification(`Published schedule change: Unassigned ${empName} from ${shiftCustomId}. Employee notified!`, 'success');
       }
 
       loadData();
@@ -990,11 +1049,25 @@ export default function Scheduler() {
     }
   };
 
-  const handleAssign = async (shiftCustomId, role, defaultStartTime, defaultEndTime, dateObj, userId, customStartTime, customEndTime) => {
+  const handleAssign = async (shiftCustomId, role, defaultStartTime, defaultEndTime, dateObj, userId, customStartTime, customEndTime, isConfirmed = false) => {
     try {
+      const dateStr = typeof dateObj === 'string' ? dateObj : dateObj.toISOString().split('T')[0];
+      const assignedEmp = employees.find(e => e.user_id === userId);
+      const empName = assignedEmp?.users?.name || 'Staff';
+
+      if (publishStatus === 'published' && !isConfirmed) {
+        setPublishedConfirmModal({
+          isOpen: true,
+          actionType: 'ASSIGN',
+          actionPayload: { shiftCustomId, role, defaultStartTime, defaultEndTime, dateObj, userId, customStartTime, customEndTime },
+          employeeName: empName,
+          shiftName: shiftCustomId,
+          dateStr
+        });
+        return;
+      }
+
       setLoading(true);
-      const dateStr = dateObj.toISOString().split('T')[0];
-      
       const startTime = customStartTime || defaultStartTime;
       const endTime = customEndTime || defaultEndTime;
 
@@ -1044,12 +1117,11 @@ export default function Scheduler() {
 
       if (assignError) throw assignError;
 
-      const assignedEmp = employees.find(e => e.user_id === userId);
-      const empName = assignedEmp?.users?.name || 'Staff';
       showToastNotification(`Successfully assigned ${empName} to ${shiftCustomId}`);
 
       if (publishStatus === 'published') {
         triggerScheduleChangeNotification({ userId, action: 'ASSIGNED', shiftCustomId, dateStr });
+        showToastNotification(`Published schedule change: Assigned ${empName} to ${shiftCustomId}. Employee notified!`, 'success');
       }
 
       // Refresh data
@@ -2033,6 +2105,64 @@ export default function Scheduler() {
                       Confirm & Publish
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Published Schedule Change Confirmation Modal */}
+        {publishedConfirmModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 flex flex-col gap-4">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
+                    <span className="material-symbols-outlined text-[22px]">warning</span>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-slate-800">Modify Published Schedule?</h3>
+                    <p className="text-xs text-amber-700 font-medium">This schedule is currently published live to staff.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setPublishedConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              <div className="bg-amber-50/80 rounded-xl p-3.5 border border-amber-200/80 text-xs space-y-2 text-slate-700">
+                <p className="font-semibold text-slate-900">
+                  You are making a change to a <span className="font-bold text-amber-800">Published Schedule</span>.
+                </p>
+                <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200/60 space-y-1">
+                  <p><span className="font-bold text-slate-700">Target Staff:</span> {publishedConfirmModal.employeeName}</p>
+                  <p><span className="font-bold text-slate-700">Shift / Action:</span> {publishedConfirmModal.shiftName}</p>
+                  {publishedConfirmModal.dateStr && <p><span className="font-bold text-slate-700">Date:</span> {publishedConfirmModal.dateStr}</p>}
+                </div>
+                <p className="text-[11px] text-amber-800 font-medium flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">notifications_active</span>
+                  An automated live notification will be sent to the employee immediately.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPublishedConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={executeConfirmedPublishedAction}
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-[18px]">send</span>
+                  Confirm & Notify
                 </button>
               </div>
             </div>
