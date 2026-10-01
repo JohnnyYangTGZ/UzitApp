@@ -48,7 +48,7 @@ export default function AdminDashboard() {
   const [staffOnCall, setStaffOnCall] = useState([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [currentDepartmentId, setCurrentDepartmentId] = useState(null);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [activeCell, setActiveCell] = useState(null);
   const [clinicActualShifts, setClinicActualShifts] = useState({
     RN: [[], [], [], [], [], [], []],
@@ -60,6 +60,16 @@ export default function AdminDashboard() {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
   const [headerDates, setHeaderDates] = useState([]);
+
+  const shiftDate = (days) => {
+    const parts = selectedDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    d.setDate(d.getDate() + days);
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    setSelectedDate(`${yr}-${mo}-${da}`);
+  };
 
   useEffect(() => {
     if (!selectedClinicId) return;
@@ -123,20 +133,24 @@ export default function AdminDashboard() {
           
         if (profileError) console.error('Error fetching profiles:', profileError);
 
-        // Calculate exact dates for the 7 days of the selected week (W1 or W2)
-        const today = new Date();
-        const currentCycleIndex = getCycleDayIndex(today);
-        const cycleStartDate = new Date(today);
-        cycleStartDate.setDate(today.getDate() - currentCycleIndex);
-        cycleStartDate.setHours(12, 0, 0, 0);
+        // Calculate exact dates for the 7 days of the week containing selectedDate
+        const targetParts = selectedDate.split('-').map(Number);
+        const targetDate = new Date(targetParts[0], targetParts[1] - 1, targetParts[2], 12, 0, 0);
+        const dayOfWeek = targetDate.getDay(); // 0 = Sunday
+        const sunday = new Date(targetDate);
+        sunday.setDate(targetDate.getDate() - dayOfWeek);
 
         const weekDates = [];
         const shortDates = [];
-        const startIdx = weekOffset * 7;
+        const weekDateObjs = [];
         for (let i = 0; i < 7; i++) {
-          const d = new Date(cycleStartDate);
-          d.setDate(cycleStartDate.getDate() + startIdx + i);
-          weekDates.push(d.toISOString().split('T')[0]);
+          const d = new Date(sunday);
+          d.setDate(sunday.getDate() + i);
+          weekDateObjs.push(d);
+          const yr = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, '0');
+          const da = String(d.getDate()).padStart(2, '0');
+          weekDates.push(`${yr}-${mo}-${da}`);
           shortDates.push(`${d.getMonth() + 1}/${d.getDate()}`);
         }
         setHeaderDates(shortDates);
@@ -162,9 +176,10 @@ export default function AdminDashboard() {
             }
             
             if (Array.isArray(pattern)) {
-              const startIdx = weekOffset * 7;
               for (let i = 0; i < 7; i++) {
-                const val = pattern[startIdx + i];
+                const d = weekDateObjs[i];
+                const cycleIdx = getCycleDayIndex(d);
+                const val = pattern[cycleIdx];
                 const dateStr = weekDates[i];
                 const hasTimeOff = timeOffData?.some(t => t.user_id === prof.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
 
@@ -198,6 +213,19 @@ export default function AdminDashboard() {
       };
       
       if (reqs) {
+        // Calculate weekDateObjs for requirements if validUserIds was 0
+        const targetParts = selectedDate.split('-').map(Number);
+        const targetDate = new Date(targetParts[0], targetParts[1] - 1, targetParts[2], 12, 0, 0);
+        const dayOfWeek = targetDate.getDay();
+        const sunday = new Date(targetDate);
+        sunday.setDate(targetDate.getDate() - dayOfWeek);
+        const reqWeekDateObjs = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(sunday);
+          d.setDate(sunday.getDate() + i);
+          reqWeekDateObjs.push(d);
+        }
+
         reqs.forEach(req => {
           let role = req.staffing_role?.toUpperCase().trim() || 'OTHER';
           if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
@@ -210,9 +238,10 @@ export default function AdminDashboard() {
           }
           
           if (Array.isArray(pattern)) {
-            const startIdx = weekOffset * 7;
             for (let i = 0; i < 7; i++) {
-              const val = pattern[startIdx + i];
+              const d = reqWeekDateObjs[i];
+              const cycleIdx = getCycleDayIndex(d);
+              const val = pattern[cycleIdx];
               if (val !== false && val !== null && val !== undefined) {
                 dailyCounts[role][i] += (req.required_count || 1);
               }
@@ -265,7 +294,7 @@ export default function AdminDashboard() {
     }
     
     loadClinicData();
-  }, [selectedClinicId, weekOffset]);
+  }, [selectedClinicId, selectedDate]);
 
   // Determine current date
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -295,26 +324,48 @@ export default function AdminDashboard() {
           <div className="md:col-span-8 flex flex-col h-full">
             <div className="bg-white p-6 sm:p-8 rounded-xl border border-surface-border shadow-sm flex flex-col justify-between h-full relative">
               <div>
-                <div className="flex items-center justify-center gap-4 mb-6 relative">
-                  <button 
-                    onClick={() => setWeekOffset(0)}
-                    disabled={weekOffset === 0}
-                    className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 flex items-center justify-center absolute left-0 bg-slate-50 border border-slate-200 transition-colors"
-                    title="Previous Week"
-                  >
-                    <span className="material-symbols-outlined text-sm">chevron_left</span>
-                  </button>
-                  <p className="font-label-sm text-label-sm text-on-surface-variant uppercase text-center">
-                    Daily Staffing Health <span className="font-semibold text-primary ml-1">W{weekOffset + 1}</span>
-                  </p>
-                  <button 
-                    onClick={() => setWeekOffset(1)}
-                    disabled={weekOffset === 1}
-                    className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 flex items-center justify-center absolute right-0 bg-slate-50 border border-slate-200 transition-colors"
-                    title="Next Week"
-                  >
-                    <span className="material-symbols-outlined text-sm">chevron_right</span>
-                  </button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">analytics</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-base sm:text-lg leading-tight">Daily Staffing Health</h3>
+                      {headerDates.length === 7 && (
+                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          Showing week of {headerDates[0]} – {headerDates[6]}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-start sm:items-end">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Select Date</span>
+                      <div className="flex items-center">
+                        <button 
+                          onClick={() => shiftDate(-7)}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-l-lg border border-r-0 border-slate-300 transition-colors flex items-center justify-center bg-white"
+                          title="Previous Week"
+                        >
+                          <span className="material-symbols-outlined text-xl">chevron_left</span>
+                        </button>
+                        <input 
+                          type="date" 
+                          value={selectedDate}
+                          onChange={e => setSelectedDate(e.target.value)}
+                          className="px-3 py-1.5 border border-slate-300 text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 outline-none shadow-xs text-sm h-[40px] bg-white cursor-pointer"
+                        />
+                        <button 
+                          onClick={() => shiftDate(7)}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-r-lg border border-l-0 border-slate-300 transition-colors flex items-center justify-center bg-white"
+                          title="Next Week"
+                        >
+                          <span className="material-symbols-outlined text-xl">chevron_right</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {loadingStats ? (
                   <div className="h-16 flex items-center justify-center text-slate-400 text-sm">Loading...</div>

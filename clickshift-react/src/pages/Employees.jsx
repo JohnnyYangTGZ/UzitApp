@@ -18,6 +18,12 @@ export default function Employees() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [formErrors, setFormErrors] = useState({
+    firstName: false,
+    lastName: false,
+    email: false,
+    staffing_role: false
+  });
   const [editForm, setEditForm] = useState({
     firstName: '',
     lastName: '',
@@ -48,6 +54,7 @@ export default function Employees() {
         schedule_pattern,
         is_on_call,
         secondary_roles,
+        company_start_date,
         users!employee_profiles_user_id_fkey!inner (
           id,
           name,
@@ -114,12 +121,13 @@ export default function Employees() {
   useEffect(() => {
     const handleOpenNewEmployee = () => {
       setSelectedEmployee(null);
+      setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
       setEditForm({
         firstName: '',
         lastName: '',
         email: '',
         phone_number: '',
-        staffing_role: 'RN',
+        staffing_role: '',
         shift_time: '',
         is_on_call: false,
         schedulePattern: DEFAULT_PATTERN,
@@ -145,6 +153,7 @@ export default function Employees() {
     // Extract clinic IDs
     const clinicIds = (selectedEmployee.users?.employee_clinics || []).map(ec => ec.clinic_id || ec.locations?.id).filter(Boolean);
 
+    setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
     setEditForm({
       firstName,
       lastName,
@@ -158,12 +167,13 @@ export default function Employees() {
       secondary_roles: selectedEmployee.secondary_roles || [],
       systemRole: selectedEmployee.users?.role || 'staff',
       newPassword: '',
-      seniority_date: selectedEmployee.seniority_date || ''
+      seniority_date: selectedEmployee.company_start_date || selectedEmployee.seniority_date || ''
     });
     setIsEditing(true);
   };
 
   const handleDiscard = () => {
+    setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
     setIsEditing(false);
     setIsCreating(false);
   };
@@ -191,8 +201,17 @@ export default function Employees() {
   };
 
   const handleSave = async () => {
-    if (!editForm.firstName || !editForm.lastName || !editForm.email) {
-      alert("Please provide at least a First Name, Last Name, and Email.");
+    const errors = {
+      firstName: !editForm.firstName?.trim(),
+      lastName: !editForm.lastName?.trim(),
+      email: !editForm.email?.trim(),
+      staffing_role: !editForm.staffing_role,
+      seniority_date: !editForm.seniority_date
+    };
+
+    setFormErrors(errors);
+
+    if (errors.firstName || errors.lastName || errors.email || errors.staffing_role || errors.seniority_date) {
       return;
     }
 
@@ -231,7 +250,7 @@ export default function Employees() {
           is_on_call: editForm.is_on_call,
           schedule_pattern: editForm.schedulePattern,
           secondary_roles: editForm.secondary_roles,
-          seniority_date: editForm.seniority_date
+          company_start_date: editForm.seniority_date
         });
 
       if (profileError) {
@@ -269,7 +288,7 @@ export default function Employees() {
         return;
       }
 
-      // Update employee_profiles table (phone, role, shift, on-call)
+      // Update employee_profiles table (phone, role, shift, on-call, seniority)
       const { error: profileError } = await supabase
         .from('employee_profiles')
         .update({
@@ -279,7 +298,8 @@ export default function Employees() {
           shift_time: editForm.shift_time,
           is_on_call: editForm.is_on_call,
           schedule_pattern: editForm.schedulePattern,
-          secondary_roles: editForm.secondary_roles
+          secondary_roles: editForm.secondary_roles,
+          company_start_date: editForm.seniority_date
         })
         .eq('user_id', selectedEmployee.user_id);
 
@@ -416,7 +436,7 @@ export default function Employees() {
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-sm text-slate-700">
-                              {emp.seniority_date ? new Date(emp.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'N/A'}
+                              {(emp.company_start_date || emp.seniority_date) ? new Date(emp.company_start_date || emp.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'N/A'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -460,30 +480,92 @@ export default function Employees() {
                     {isCreating ? '?' : selectedEmployee?.users?.name?.charAt(0) || '?'}
                   </div>
                   {isEditing ? (
-                    <div className="w-full flex gap-2">
-                      <input 
-                        type="text" 
-                        value={editForm.firstName} 
-                        onChange={e => setEditForm({...editForm, firstName: e.target.value})}
-                        className="w-1/2 px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        placeholder="First Name"
-                      />
-                      <input 
-                        type="text" 
-                        value={editForm.lastName} 
-                        onChange={e => setEditForm({...editForm, lastName: e.target.value})}
-                        className="w-1/2 px-3 py-2 border border-slate-300 rounded-md text-sm"
-                        placeholder="Last Name"
-                      />
+                    <div className="w-full space-y-3">
+                      <div>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            value={editForm.firstName} 
+                            onChange={e => {
+                              setEditForm({...editForm, firstName: e.target.value});
+                              if (formErrors.firstName) setFormErrors({...formErrors, firstName: false});
+                            }}
+                            className={`w-1/2 px-3 py-2 border rounded-md text-sm outline-none transition-all ${
+                              formErrors.firstName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                            }`}
+                            placeholder="First Name *"
+                          />
+                          <input 
+                            type="text" 
+                            value={editForm.lastName} 
+                            onChange={e => {
+                              setEditForm({...editForm, lastName: e.target.value});
+                              if (formErrors.lastName) setFormErrors({...formErrors, lastName: false});
+                            }}
+                            className={`w-1/2 px-3 py-2 border rounded-md text-sm outline-none transition-all ${
+                              formErrors.lastName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                            }`}
+                            placeholder="Last Name *"
+                          />
+                        </div>
+                        {(formErrors.firstName || formErrors.lastName) && (
+                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">First and Last Name are required.</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1 text-left">Primary Staffing Role *</label>
+                        <select
+                          value={editForm.staffing_role}
+                          onChange={e => {
+                            setEditForm({...editForm, staffing_role: e.target.value});
+                            if (formErrors.staffing_role) setFormErrors({...formErrors, staffing_role: false});
+                          }}
+                          className={`w-full px-3 py-2 border rounded-md text-sm bg-white font-semibold outline-none transition-all ${
+                            formErrors.staffing_role 
+                              ? 'border-red-500 bg-red-50/50 text-red-600 ring-2 ring-red-100' 
+                              : 'border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                        >
+                          <option value="" disabled>-- Select Staffing Role --</option>
+                          {availableRoles.map(role => (
+                            <option key={role.name} value={role.name}>
+                              {role.name} {role.description ? `- ${role.description}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors.staffing_role && (
+                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">Please select a primary staffing role.</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1 text-left">Email Address *</label>
+                        <input 
+                          type="email" 
+                          value={editForm.email} 
+                          onChange={e => {
+                            setEditForm({...editForm, email: e.target.value});
+                            if (formErrors.email) setFormErrors({...formErrors, email: false});
+                          }}
+                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
+                            formErrors.email ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                          placeholder="e.g. employee@clinic.com *"
+                        />
+                        {formErrors.email && (
+                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">Email address is required to create a user account.</p>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <h3 className="font-h3 text-h3 text-slate-900">{selectedEmployee?.users?.name}</h3>
+                    <>
+                      <h3 className="font-h3 text-h3 text-slate-900">{selectedEmployee?.users?.name}</h3>
+                      <p className="text-primary font-semibold mt-1">
+                        {selectedEmployee?.job_title || 'New Employee'}
+                      </p>
+                    </>
                   )}
-                  <p className="text-primary font-semibold mt-1">
-                    {isEditing 
-                      ? `${getRoleDescription(editForm.staffing_role)}${editForm.is_on_call ? ' (on-call)' : ''}` 
-                      : (selectedEmployee?.job_title || 'New Employee')}
-                  </p>
                   {!isCreating && <p className="text-xs text-slate-500 font-mono mt-1">Employee ID: {selectedEmployee?.employee_code}</p>}
                 </div>
 
@@ -585,18 +667,27 @@ export default function Employees() {
                     <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Operational Details</h4>
                     <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">Seniority Date</span>
+                        <span className="text-xs font-bold text-slate-600">Seniority Date *</span>
                         {isEditing ? (
-                          <input 
-                            type="date"
-                            value={editForm.seniority_date}
-                            onChange={e => setEditForm({...editForm, seniority_date: e.target.value})}
-                            className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[140px] focus:ring-1 focus:ring-primary outline-none text-slate-700"
-                            required
-                          />
+                          <div className="flex flex-col items-end">
+                            <input 
+                              type="date"
+                              value={editForm.seniority_date}
+                              onChange={e => {
+                                setEditForm({...editForm, seniority_date: e.target.value});
+                                if (formErrors.seniority_date) setFormErrors({...formErrors, seniority_date: false});
+                              }}
+                              className={`px-2 py-1.5 border rounded text-xs w-[140px] outline-none text-slate-700 transition-all ${
+                                formErrors.seniority_date ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-1 focus:ring-blue-500'
+                              }`}
+                            />
+                            {formErrors.seniority_date && (
+                              <span className="text-[10px] text-red-600 font-semibold mt-0.5">Required date</span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-sm font-semibold text-slate-700">
-                            {selectedEmployee?.seniority_date ? new Date(selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                            {(selectedEmployee?.company_start_date || selectedEmployee?.seniority_date) ? new Date(selectedEmployee.company_start_date || selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
                           </span>
                         )}
                       </div>

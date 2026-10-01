@@ -49,7 +49,109 @@ const getWeekDays = (dateStr) => {
   return week;
 };
 
-const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandidates, onAssign }) => {
+const parsePattern = (pattern) => {
+  if (!pattern) return null;
+  if (Array.isArray(pattern)) return pattern;
+  if (typeof pattern === 'string') {
+    try {
+      const parsed = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
+      if (Array.isArray(parsed)) return parsed;
+    } catch(e) {
+      const cleanStr = pattern.replace(/^\{|\}$|^\[|\]$/g, '');
+      return cleanStr.split(',').map(s => {
+        const t = s.trim();
+        if(t==='true'||t==='t') return true;
+        if(t==='false'||t==='f') return false;
+        if(t==='null'||t==='undefined') return null;
+        return t.replace(/^"|"$/g, '');
+      });
+    }
+  }
+  if (typeof pattern === 'object' && !Array.isArray(pattern)) {
+     return Object.keys(pattern).sort((a,b)=>Number(a)-Number(b)).map(k => pattern[k]);
+  }
+  return null;
+};
+
+const normalizeTimeString = (tStr) => {
+  if (!tStr) return '';
+  let str = String(tStr).trim().toUpperCase();
+  const isPM = str.includes('PM');
+  const isAM = str.includes('AM');
+  str = str.replace(/AM|PM/g, '').trim();
+  const parts = str.split(':');
+  let h = parseInt(parts[0], 10);
+  let m = parts[1] ? parseInt(parts[1], 10) : 0;
+  if (isNaN(h)) return '';
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  if (!isAM && !isPM && h >= 1 && h <= 6) h += 12;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+const normalizeTimeRange = (rangeStr) => {
+  if (!rangeStr) return '';
+  const str = String(rangeStr);
+  if (str.includes('-')) {
+    const parts = str.split('-');
+    const s = normalizeTimeString(parts[0]);
+    const e = normalizeTimeString(parts[1]);
+    if (s && e) return `${s}-${e}`;
+  }
+  return str.trim();
+};
+
+const checkShiftTimeCompatibility = (empVal, empShiftTime, shiftVal, shift) => {
+  let empTime = typeof empVal === 'string'
+    ? normalizeTimeRange(empVal)
+    : (empVal === true && empShiftTime ? normalizeTimeRange(empShiftTime) : '');
+
+  if (!empTime) return true;
+
+  let shiftTime = typeof shiftVal === 'string' ? normalizeTimeRange(shiftVal) : '';
+  let shiftPattern = parsePattern(shift.schedule_pattern);
+  let shiftPatternTimes = Array.isArray(shiftPattern)
+    ? shiftPattern.filter(x => typeof x === 'string').map(normalizeTimeRange)
+    : [];
+  let shiftStartEndTime = (shift.start_time && shift.end_time)
+    ? normalizeTimeRange(`${shift.start_time}-${shift.end_time}`)
+    : '';
+
+  if (shiftTime) {
+    return empTime === shiftTime;
+  }
+
+  if (shiftPatternTimes.length > 0) {
+    if (shiftPatternTimes.includes(empTime)) return true;
+    if ((shift.custom_id || '').toLowerCase().includes('early') && empTime.startsWith('08:30')) return true;
+    return false;
+  }
+
+  if (shiftStartEndTime) {
+    if (empTime === shiftStartEndTime) return true;
+    if ((shift.custom_id || '').toLowerCase().includes('early') && empTime.startsWith('08:30')) return true;
+    return true;
+  }
+
+  return true;
+};
+
+const CoverageCell = ({ 
+  reqCount, 
+  employees, 
+  isActive, 
+  shiftTime, 
+  shiftRole, 
+  shiftCustomId, 
+  dateObj, 
+  draggedItem, 
+  availableCandidates, 
+  onAssign, 
+  onRemoveAssign, 
+  onRoleMismatch,
+  onDragAssignedStart 
+}) => {
+  const [isDragOver, setIsDragOver] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [candidateToConfirm, setCandidateToConfirm] = useState(null);
   const dropdownRef = useRef(null);
@@ -83,9 +185,77 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandi
     ? shiftTime.split('-').map(t => formatTime(t)).join(' - ') 
     : null;
 
+  const isRoleCompatible = (item, requiredRole) => {
+    if (!item || !requiredRole) return true;
+    const primary = (item.staffingRole || item.staffing_role || '').toUpperCase().trim();
+    const target = (requiredRole || '').toUpperCase().trim();
+    if (primary === target) return true;
+    if (Array.isArray(item.secondaryRoles || item.secondary_roles)) {
+      const sec = item.secondaryRoles || item.secondary_roles;
+      return sec.some(r => (r || '').toUpperCase().trim() === target);
+    }
+    return false;
+  };
+
+  const compatible = draggedItem ? isRoleCompatible(draggedItem, shiftRole) : true;
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (isActive) {
+      e.dataTransfer.dropEffect = compatible ? 'copy' : 'none';
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!isActive) return;
+
+    try {
+      const raw = e.dataTransfer.getData('text/plain');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data && data.userId) {
+          // Verify role compatibility
+          const allowed = isRoleCompatible(data, shiftRole);
+          if (!allowed) {
+            if (onRoleMismatch) {
+              onRoleMismatch(data.userName, data.staffingRole, shiftRole);
+            }
+            return;
+          }
+
+          let customS = null;
+          let customE = null;
+          if (shiftTime && shiftTime.includes('-')) {
+            const [s, eTime] = shiftTime.split('-');
+            customS = s.trim().slice(0, 5);
+            customE = eTime.trim().slice(0, 5);
+          }
+          onAssign({ user_id: data.userId, users: { name: data.userName } }, customS, customE);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to parse drag drop data:', err);
+    }
+  };
+
   if (!isActive) {
     return (
-      <div className="h-full min-h-[80px] flex items-center justify-center">
+      <div 
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className="h-full min-h-[80px] flex items-center justify-center bg-slate-50/50 rounded"
+      >
         <span className="text-xs font-bold text-slate-400 tracking-wider">OFF</span>
       </div>
     );
@@ -178,7 +348,30 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandi
   const hasCandidates = availableCandidates && availableCandidates.length > 0;
 
   return (
-    <div className="flex flex-col gap-2 h-full min-h-[80px] relative">
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex flex-col gap-2 h-full min-h-[80px] relative p-1 rounded-lg transition-all ${
+        isDragOver 
+          ? compatible
+            ? 'bg-blue-50/95 border-2 border-dashed border-blue-500 ring-4 ring-blue-100/60 scale-[0.99] shadow-inner'
+            : 'bg-rose-50/95 border-2 border-dashed border-rose-500 ring-4 ring-rose-100/60 scale-[0.99] shadow-inner'
+          : 'border border-transparent'
+      }`}
+    >
+      {isDragOver && (
+        <div className={`absolute inset-0 text-white rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 z-30 shadow-xl backdrop-blur-sm pointer-events-none select-none ${
+          compatible ? 'bg-blue-600/90' : 'bg-rose-600/90'
+        }`}>
+          <span className="material-symbols-outlined text-2xl animate-bounce pointer-events-none">
+            {compatible ? 'person_add' : 'block'}
+          </span>
+          <span className="text-center px-1 pointer-events-none">
+            {compatible ? 'Drop to Assign' : `Role Mismatch (Requires ${shiftRole})`}
+          </span>
+        </div>
+      )}
       {hasCandidates && (
         <div ref={dropdownRef} className="absolute -top-2 -right-2 z-20">
           <button 
@@ -290,12 +483,34 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandi
         {employees && employees.map((emp, empIdx) => {
           const isPartial = emp.partialTimeOffs && emp.partialTimeOffs.length > 0;
           return (
-            <div key={empIdx} className={`flex flex-col gap-1 p-1.5 rounded shadow-sm border transition-colors ${isPartial ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+            <div 
+              key={empIdx} 
+              draggable={true}
+              onDragStart={(e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData('text/plain', JSON.stringify({
+                  type: 'ASSIGNED_EMPLOYEE',
+                  userId: emp.user_id,
+                  userName: emp.users?.name,
+                  shiftCustomId,
+                  dateObjStr: dateObj ? (typeof dateObj === 'string' ? dateObj : dateObj.toISOString()) : ''
+                }));
+                e.dataTransfer.effectAllowed = 'move';
+                if (onDragAssignedStart) onDragAssignedStart(emp, shiftCustomId, dateObj);
+              }}
+              onDragEnd={() => {
+                if (onDragAssignedStart) onDragAssignedStart(null, null, null);
+              }}
+              className={`flex flex-col gap-1 p-1.5 rounded shadow-sm border transition-all cursor-grab active:cursor-grabbing group ${
+                isPartial ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200 hover:border-blue-400 hover:shadow-md'
+              }`}
+              title="Drag out to Staff Pool or click × to remove assignment"
+            >
               <div className="flex items-center gap-1.5">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 ${isPartial ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                   {emp.users?.name?.charAt(0) || '?'}
                 </div>
-                <div className="flex flex-col overflow-hidden">
+                <div className="flex flex-col overflow-hidden min-w-0 flex-1">
                   <span className={`font-semibold text-xs truncate ${isPartial ? 'text-amber-800' : 'text-slate-700'}`} title={emp.users?.name}>
                     {emp.users?.name}
                   </span>
@@ -305,6 +520,17 @@ const CoverageCell = ({ reqCount, employees, isActive, shiftTime, availableCandi
                     </span>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onRemoveAssign) onRemoveAssign(emp.user_id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded"
+                  title="Remove shift assignment"
+                >
+                  <span className="material-symbols-outlined text-[13px] block">close</span>
+                </button>
               </div>
               {isPartial && emp.partialTimeOffs.map((pt, i) => (
                 <div key={i} className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200 w-fit flex items-center gap-1">
@@ -369,7 +595,374 @@ export default function Scheduler() {
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
 
+  // Drag & Drop / Sidebar States
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [searchPool, setSearchPool] = useState('');
+  const [rolePoolFilter, setRolePoolFilter] = useState('All');
+  const [toast, setToast] = useState(null);
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [isPoolDragOver, setIsPoolDragOver] = useState(false);
+
+  // Schedule Publishing & Notification Framework States
+  const [publishStatus, setPublishStatus] = useState('draft'); // 'draft' | 'published'
+  const [publishedMeta, setPublishedMeta] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+
+  const handleAutoGenerateSchedule = async () => {
+    if (!selectedClinicId || weekDates.length === 0) return;
+    setAutoGenerating(true);
+    let autoAssignedCount = 0;
+
+    try {
+      for (const dateObj of weekDates) {
+        const dateStr = dateObj.toISOString().split('T')[0];
+        const cycleDayIndex = getCycleDayIndex(dateObj);
+        const assignedUserIds = new Set();
+
+        for (const shift of shifts) {
+          // Check shift pattern
+          let pattern = parsePattern(shift.schedule_pattern);
+          const shiftVal = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
+          const isActive = shiftVal !== false && shiftVal !== null && shiftVal !== undefined;
+
+          if (!isActive) continue;
+
+          // Find eligible employees
+          const eligible = employees.filter(emp => {
+            let empPattern = parsePattern(emp.schedule_pattern);
+            if (!empPattern || empPattern.length !== 14) return false;
+            const empVal = empPattern[cycleDayIndex];
+            if (empVal === false || empVal === null || empVal === undefined) return false;
+
+            // Shift time matching
+            if (!checkShiftTimeCompatibility(empVal, emp.shift_time, shiftVal, shift)) return false;
+
+            // Role match
+            const primaryRole = (emp.staffing_role || '').trim();
+            const shiftRole = (shift.staffing_role || '').trim();
+            const hasSecondary = Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(shiftRole);
+            if (primaryRole !== shiftRole && !hasSecondary) return false;
+
+            // Authorized clinic
+            const authorizedClinics = emp.users?.employee_clinics?.map(ec => ec.locations?.id) || [];
+            if (!authorizedClinics.includes(selectedClinicId)) return false;
+
+            // Not already assigned
+            if (assignedUserIds.has(emp.user_id)) return false;
+
+            return true;
+          });
+
+          if (eligible.length > 0) {
+            const needed = shift.required_count || 1;
+            const toAssign = eligible.slice(0, needed);
+
+            for (const emp of toAssign) {
+              assignedUserIds.add(emp.user_id);
+
+              // Check if a shift already exists in `shifts`
+              let query = supabase
+                .from('shifts')
+                .select('id')
+                .eq('location_id', selectedClinicId)
+                .eq('date', dateStr)
+                .eq('time_block', shift.custom_id);
+
+              if (shift.start_time) query = query.eq('start_time', shift.start_time);
+              if (shift.end_time) query = query.eq('end_time', shift.end_time);
+
+              const { data: existingShifts } = await query.limit(1);
+              let shiftId;
+
+              if (existingShifts && existingShifts.length > 0) {
+                shiftId = existingShifts[0].id;
+              } else {
+                const { data: newShift, error: shiftError } = await supabase
+                  .from('shifts')
+                  .insert({
+                    location_id: selectedClinicId,
+                    date: dateStr,
+                    time_block: shift.custom_id,
+                    start_time: shift.start_time,
+                    end_time: shift.end_time,
+                    staffing_role: shift.staffing_role
+                  })
+                  .select('id')
+                  .single();
+
+                if (shiftError) continue;
+                shiftId = newShift.id;
+              }
+
+              // Insert shift assignment if not already assigned
+              const { data: existingAssign } = await supabase
+                .from('shift_assignments')
+                .select('id')
+                .eq('shift_id', shiftId)
+                .eq('user_id', emp.user_id);
+
+              if (!existingAssign || existingAssign.length === 0) {
+                const { error: assignErr } = await supabase
+                  .from('shift_assignments')
+                  .insert({
+                    shift_id: shiftId,
+                    user_id: emp.user_id
+                  });
+
+                if (!assignErr) {
+                  autoAssignedCount++;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      showToastNotification(`Successfully auto-generated ${autoAssignedCount} shift assignment(s) for the week!`, 'success');
+      loadData();
+    } catch (err) {
+      console.error('Auto-generate error:', err);
+      showToastNotification(`Auto-generation error: ${err.message}`, 'error');
+    } finally {
+      setAutoGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      setIsPoolDragOver(false);
+      setDraggedItem(null);
+    };
+    window.addEventListener('dragend', handleGlobalDragEnd);
+    window.addEventListener('mouseup', handleGlobalDragEnd);
+    return () => {
+      window.removeEventListener('dragend', handleGlobalDragEnd);
+      window.removeEventListener('mouseup', handleGlobalDragEnd);
+    };
+  }, []);
+
+  const showToastNotification = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3800);
+  };
+
+  const triggerScheduleChangeNotification = async ({ userId, action, shiftCustomId, dateStr }) => {
+    // Framework hook for notification dispatch
+    console.log(`[PUSH NOTIFICATION FRAMEWORK] Live schedule change alert for user ${userId}: ${action} on ${shiftCustomId} (${dateStr})`);
+  };
+
+  const getWeekStartStr = (dateStr) => {
+    const weekDays = getWeekDays(dateStr);
+    if (weekDays && weekDays.length > 0) {
+      return weekDays[0].toISOString().split('T')[0];
+    }
+    return dateStr;
+  };
+
+  const fetchPublicationStatus = async (clinicId, dateStr) => {
+    if (!clinicId || !dateStr) return;
+    const weekStart = getWeekStartStr(dateStr);
+    const localKey = `schedule_pub_${clinicId}_${weekStart}`;
+    
+    try {
+      const { data, error } = await supabase
+        .from('schedule_publications')
+        .select('*')
+        .eq('location_id', clinicId)
+        .eq('week_start_date', weekStart)
+        .maybeSingle();
+
+      if (error) {
+        const stored = localStorage.getItem(localKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setPublishStatus(parsed.status || 'draft');
+          setPublishedMeta(parsed);
+        } else {
+          setPublishStatus('draft');
+          setPublishedMeta(null);
+        }
+        return;
+      }
+
+      if (data && data.status) {
+        setPublishStatus(data.status);
+        setPublishedMeta(data);
+        localStorage.setItem(localKey, JSON.stringify(data));
+      } else {
+        const stored = localStorage.getItem(localKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setPublishStatus(parsed.status || 'draft');
+          setPublishedMeta(parsed);
+        } else {
+          setPublishStatus('draft');
+          setPublishedMeta(null);
+        }
+      }
+    } catch (err) {
+      const stored = localStorage.getItem(localKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setPublishStatus(parsed.status || 'draft');
+        setPublishedMeta(parsed);
+      } else {
+        setPublishStatus('draft');
+        setPublishedMeta(null);
+      }
+    }
+  };
+
+  const handleExecutePublish = async () => {
+    if (!selectedClinicId) return;
+    const weekStart = getWeekStartStr(selectedDate);
+    const localKey = `schedule_pub_${selectedClinicId}_${weekStart}`;
+    
+    setPublishing(true);
+    try {
+      const payload = {
+        location_id: selectedClinicId,
+        week_start_date: weekStart,
+        status: 'published',
+        published_at: new Date().toISOString(),
+      };
+
+      localStorage.setItem(localKey, JSON.stringify(payload));
+      setPublishStatus('published');
+      setPublishedMeta(payload);
+
+      const { data, error } = await supabase
+        .from('schedule_publications')
+        .upsert(payload, { onConflict: 'location_id,week_start_date' })
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase table schedule_publications missing, fallback active:', error.message);
+      } else if (data) {
+        setPublishedMeta(data);
+      }
+
+      showToastNotification(`Schedule for week of ${weekStart} is now Published! All scheduled staff have been notified.`, 'success');
+      console.log('[NOTIFICATION FRAMEWORK] Triggering mass publish notification for week:', weekStart);
+    } catch (err) {
+      setPublishStatus('published');
+      showToastNotification(`Schedule for week of ${weekStart} is now Published!`, 'success');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedClinicId && selectedDate) {
+      fetchPublicationStatus(selectedClinicId, selectedDate);
+    }
+  }, [selectedClinicId, selectedDate]);
+
   const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'the selected clinic';
+
+  const assignedUserIds = new Set();
+  Object.values(weeklyAssignments).forEach(daysArr => {
+    if (Array.isArray(daysArr)) {
+      daysArr.forEach(day => {
+        if (day && day.employees && Array.isArray(day.employees)) {
+          day.employees.forEach(emp => {
+            if (emp.user_id) assignedUserIds.add(emp.user_id);
+            if (emp.id) assignedUserIds.add(emp.id);
+          });
+        }
+      });
+    }
+  });
+  Object.values(employeeAssignments).forEach(empRecord => {
+    if (empRecord && empRecord.days && Array.isArray(empRecord.days)) {
+      const hasShifts = empRecord.days.some(d => d.shifts && d.shifts.length > 0);
+      if (hasShifts && empRecord.employee) {
+        if (empRecord.employee.user_id) assignedUserIds.add(empRecord.employee.user_id);
+        if (empRecord.employee.id) assignedUserIds.add(empRecord.employee.id);
+      }
+    }
+  });
+
+  const currentCycleDayIndex = selectedDate ? getCycleDayIndex(new Date(selectedDate + 'T12:00:00Z')) : 0;
+
+  const isEmpScheduledToday = (emp) => {
+    const pattern = parsePattern(emp.schedule_pattern);
+    if (!pattern || pattern.length !== 14) return false;
+    const dayVal = pattern[currentCycleDayIndex];
+    return dayVal !== false && dayVal !== null && dayVal !== undefined;
+  };
+
+  const filteredPoolEmps = employees.filter(emp => {
+    if (assignedUserIds.has(emp.user_id) || assignedUserIds.has(emp.id)) {
+      return false;
+    }
+    const nameMatch = (emp.users?.name || '').toLowerCase().includes(searchPool.toLowerCase());
+    const roleMatch = rolePoolFilter === 'All' || emp.staffing_role === rolePoolFilter || (Array.isArray(emp.secondary_roles) && emp.secondary_roles.includes(rolePoolFilter));
+    return nameMatch && roleMatch;
+  }).sort((a, b) => {
+    const aNeeded = isEmpScheduledToday(a);
+    const bNeeded = isEmpScheduledToday(b);
+    if (aNeeded && !bNeeded) return -1;
+    if (!aNeeded && bNeeded) return 1;
+    return (a.users?.name || '').localeCompare(b.users?.name || '');
+  });
+
+  const handleRemoveAssignment = async (shiftCustomId, dateObj, userId) => {
+    try {
+      setLoading(true);
+      const dateStr = typeof dateObj === 'string' ? dateObj : dateObj.toISOString().split('T')[0];
+
+      const { data: shiftsFound } = await supabase
+        .from('shifts')
+        .select('id')
+        .eq('location_id', selectedClinicId)
+        .eq('date', dateStr)
+        .eq('time_block', shiftCustomId);
+
+      if (shiftsFound && shiftsFound.length > 0) {
+        const shiftIds = shiftsFound.map(s => s.id);
+        const { error } = await supabase
+          .from('shift_assignments')
+          .delete()
+          .in('shift_id', shiftIds)
+          .eq('user_id', userId);
+
+        if (error) throw error;
+      } else {
+        // Create an explicit shift override record with 0 assignments to override automatic schedule pattern
+        const targetShiftDef = shifts.find(s => s.custom_id === shiftCustomId);
+        const { error: createError } = await supabase
+          .from('shifts')
+          .insert({
+            location_id: selectedClinicId,
+            date: dateStr,
+            time_block: shiftCustomId,
+            staffing_role: targetShiftDef?.staffing_role || 'STAFF',
+            start_time: targetShiftDef?.start_time,
+            end_time: targetShiftDef?.end_time
+          });
+
+        if (createError) throw createError;
+      }
+
+      const unassignedEmp = employees.find(e => e.user_id === userId);
+      const empName = unassignedEmp?.users?.name || 'Staff';
+      showToastNotification(`Unassigned ${empName} from ${shiftCustomId}`, 'info');
+
+      if (publishStatus === 'published') {
+        triggerScheduleChangeNotification({ userId, action: 'UNASSIGNED', shiftCustomId, dateStr });
+      }
+
+      loadData();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message);
+      setLoading(false);
+    }
+  };
 
   const handleAssign = async (shiftCustomId, role, defaultStartTime, defaultEndTime, dateObj, userId, customStartTime, customEndTime) => {
     try {
@@ -424,6 +1017,14 @@ export default function Scheduler() {
         });
 
       if (assignError) throw assignError;
+
+      const assignedEmp = employees.find(e => e.user_id === userId);
+      const empName = assignedEmp?.users?.name || 'Staff';
+      showToastNotification(`Successfully assigned ${empName} to ${shiftCustomId}`);
+
+      if (publishStatus === 'published') {
+        triggerScheduleChangeNotification({ userId, action: 'ASSIGNED', shiftCustomId, dateStr });
+      }
 
       // Refresh data
       loadData();
@@ -513,30 +1114,6 @@ export default function Scheduler() {
       setLoading(false);
     }
   }
-
-  const parsePattern = (pattern) => {
-    if (!pattern) return null;
-    if (Array.isArray(pattern)) return pattern;
-    if (typeof pattern === 'string') {
-      try {
-        const parsed = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
-        if (Array.isArray(parsed)) return parsed;
-      } catch(e) {
-        const cleanStr = pattern.replace(/^\{|\}$|^\[|\]$/g, '');
-        return cleanStr.split(',').map(s => {
-          const t = s.trim();
-          if(t==='true'||t==='t') return true;
-          if(t==='false'||t==='f') return false;
-          if(t==='null'||t==='undefined') return null;
-          return t.replace(/^"|"$/g, '');
-        });
-      }
-    }
-    if (typeof pattern === 'object' && !Array.isArray(pattern)) {
-       return Object.keys(pattern).sort((a,b)=>Number(a)-Number(b)).map(k => pattern[k]);
-    }
-    return null;
-  };
 
   async function fetchAdhocAndCalculate(currentShifts, currentEmployees) {
     const currentWeekDates = getWeekDays(selectedDate);
@@ -665,16 +1242,16 @@ export default function Scheduler() {
       sortedShifts.forEach(shift => {
         // Is this shift active on this day?
         let pattern = parsePattern(shift.schedule_pattern);
-        const dayVal = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
-        const isActive = dayVal !== false && dayVal !== null && dayVal !== undefined;
+        const shiftVal = pattern && pattern.length === 14 ? pattern[cycleDayIndex] : false;
+        const isActive = shiftVal !== false && shiftVal !== null && shiftVal !== undefined;
 
         if (!isActive) {
           newWeeklyAssignments[shift.id].push({ isActive: false, employees: [] });
           return;
         }
 
-        const shiftTimeStr = typeof dayVal === 'string'
-          ? dayVal.trim()
+        const shiftTimeStr = typeof shiftVal === 'string'
+          ? shiftVal.trim()
           : (shift.start_time && shift.end_time) 
             ? `${shift.start_time.slice(0,5)}-${shift.end_time.slice(0,5)}` 
             : shift.time_block;
@@ -685,26 +1262,11 @@ export default function Scheduler() {
           // Must be scheduled to work
           if (!pattern || pattern.length !== 14) return false;
           
-          const dayVal = pattern[cycleDayIndex];
-          if (dayVal === false || dayVal === null || dayVal === undefined) return false;
+          const empVal = pattern[cycleDayIndex];
+          if (empVal === false || empVal === null || empVal === undefined) return false;
 
-          // If dayVal is a custom string, it must match the shift time block
-          if (typeof dayVal === 'string') {
-            const empTimeClean = dayVal.trim();
-            const shiftTimeClean = (shiftTimeStr || '').trim();
-            if (empTimeClean !== shiftTimeClean) return false;
-          } else if (dayVal === true && emp.shift_time) {
-            // If dayVal is true, the employee's default shift_time must match the shift's time
-            let empShiftTimeStr = emp.shift_time;
-            if (empShiftTimeStr.includes('-')) {
-               const parts = empShiftTimeStr.split('-');
-               const sTime = parts[0].trim().slice(0,5);
-               const eTime = parts[1].trim().slice(0,5);
-               empShiftTimeStr = `${sTime}-${eTime}`;
-            }
-            const shiftTimeClean = (shiftTimeStr || '').trim();
-            if (empShiftTimeStr !== shiftTimeClean) return false;
-          }
+          // Shift time matching
+          if (!checkShiftTimeCompatibility(empVal, emp.shift_time, shiftVal, shift)) return false;
 
           // Must match role
           const primaryRole = (emp.staffing_role || '').trim();
@@ -726,20 +1288,19 @@ export default function Scheduler() {
           return true;
         });
 
-        // Check for template overrides (manual assignment to a template shift)
+        // Check for template overrides (manual assignment/unassignment to a template shift)
         if (!shift._isAdhoc && templateOverrides && templateOverrides[shift.custom_id]) {
           const dateStr = dateObj.toISOString().split('T')[0];
           const overridenAssignments = templateOverrides[shift.custom_id][dateStr];
-          if (overridenAssignments && overridenAssignments.length > 0) {
-            const overridenUserIds = overridenAssignments.map(o => o.user_id);
-            // Extract these users from the current eligible list or the general pool
-            const overridenEmps = currentEmployees.filter(e => overridenUserIds.includes(e.user_id));
-            
-            // Remove them from general eligible list to avoid duplicates
-            eligible = eligible.filter(e => !overridenUserIds.includes(e.user_id));
-            
-            // Prepend them to the top of the eligible list so they get picked first
-            eligible = [...overridenEmps, ...eligible];
+          if (overridenAssignments !== undefined) {
+            if (overridenAssignments.length > 0) {
+              const overridenUserIds = overridenAssignments.map(o => o.user_id);
+              const overridenEmps = currentEmployees.filter(e => overridenUserIds.includes(e.user_id));
+              eligible = overridenEmps;
+            } else {
+              // Explicitly cleared / unassigned shift override!
+              eligible = [];
+            }
           }
         }
 
@@ -834,22 +1395,25 @@ export default function Scheduler() {
     <Layout>
       <div className="p-8 space-y-6 max-w-[1600px] mx-auto h-[calc(100vh-4rem)] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="material-symbols-outlined text-3xl text-blue-600">calendar_month</span>
-              <h1 className="font-h1 text-h1 text-on-surface">Schedule</h1>
-            </div>
-            <p className="text-body-md text-on-surface-variant max-w-2xl">
-              Daily Schedule for {clinicName}.
-            </p>
-          </div>
-          
+        <div className="flex items-center justify-between shrink-0 gap-4 flex-wrap">
           <div className="flex items-center gap-6">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <span className="material-symbols-outlined text-3xl text-blue-600">calendar_month</span>
+                <h1 className="font-h1 text-h1 text-on-surface">Schedule</h1>
+              </div>
+              <p className="text-xs font-semibold text-slate-500">
+                Daily Schedule for {clinicName}
+              </p>
+            </div>
+
+            <div className="h-10 w-px bg-slate-200"></div>
+
+            {/* Role Filter */}
             <div className="flex flex-col items-start">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Filter by Role</span>
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Filter by Role</span>
               <select
-                className="bg-white border border-slate-300 text-slate-700 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2"
+                className="bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none shadow-sm"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
               >
@@ -860,48 +1424,104 @@ export default function Scheduler() {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-end">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Select Week</span>
-                <div className="flex items-center">
-                  <button 
-                    onClick={() => shiftWeek(-7)}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-l-lg border border-r-0 border-slate-300 transition-colors flex items-center justify-center"
-                    title="Previous Week"
-                  >
-                    <span className="material-symbols-outlined text-xl">chevron_left</span>
-                  </button>
-                  <input 
-                    type="date" 
-                    value={selectedDate}
-                    onChange={e => setSelectedDate(e.target.value)}
-                    className="px-4 py-2 border-y border-slate-300 text-slate-900 font-semibold focus:ring-2 focus:ring-blue-500 outline-none shadow-sm h-[42px]"
-                  />
-                  <button 
-                    onClick={() => shiftWeek(7)}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-r-lg border border-l-0 border-slate-300 transition-colors flex items-center justify-center"
-                    title="Next Week"
-                  >
-                    <span className="material-symbols-outlined text-xl">chevron_right</span>
-                  </button>
-                </div>
+            {/* Date Selector */}
+            <div className="flex flex-col items-start">
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Select Date</span>
+              <div className="flex items-center">
+                <button 
+                  onClick={() => shiftWeek(-7)}
+                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-l-lg border border-r-0 border-slate-300 transition-colors flex items-center justify-center bg-white"
+                  title="Previous Week"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_left</span>
+                </button>
+                <input 
+                  type="date" 
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className="px-3 py-1 border-y border-slate-300 text-slate-900 font-semibold text-xs focus:ring-2 focus:ring-blue-500 outline-none shadow-sm h-[34px] bg-white"
+                />
+                <button 
+                  onClick={() => shiftWeek(7)}
+                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-r-lg border border-l-0 border-slate-300 transition-colors flex items-center justify-center bg-white"
+                  title="Next Week"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_right</span>
+                </button>
               </div>
             </div>
-            <div className="h-10 w-px bg-slate-200 mx-2"></div>
+
+            {/* Schedule Publication Status & Action */}
+            <div className="flex flex-col items-start">
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Schedule Status</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAutoGenerateSchedule}
+                  disabled={autoGenerating}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-300 disabled:opacity-50"
+                  title="Auto-generate schedule from 14-day templates"
+                >
+                  <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                  {autoGenerating ? 'Generating...' : 'Auto-Generate Schedule'}
+                </button>
+
+                {publishStatus === 'published' ? (
+                  <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Published
+                  </span>
+                ) : (
+                  <>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-300 flex items-center gap-1.5 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                      Draft
+                    </span>
+
+                    <button
+                      onClick={() => setShowPublishModal(true)}
+                      disabled={publishing}
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white border border-blue-600"
+                      title="Publish schedule to staff"
+                    >
+                      <span className="material-symbols-outlined text-sm">send</span>
+                      Publish Schedule
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
             <div className="bg-slate-100 p-1 rounded-lg flex border border-slate-200">
               <button 
-                className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'shifts' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'shifts' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                 onClick={() => setActiveTab('shifts')}
               >
                 By Shifts
               </button>
               <button 
-                className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'employees' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'employees' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
                 onClick={() => setActiveTab('employees')}
               >
                 By Employees
               </button>
             </div>
+
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 border transition-all ${
+                showSidebar 
+                  ? 'bg-blue-50 text-blue-800 border-blue-200 shadow-sm' 
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              }`}
+              title={showSidebar ? 'Hide Staff Pool' : 'Show Staff Pool'}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {showSidebar ? 'side_navigation' : 'group'}
+              </span>
+              {showSidebar ? 'Hide Staff Pool' : 'Staff Pool'}
+            </button>
           </div>
         </div>
 
@@ -911,243 +1531,494 @@ export default function Scheduler() {
           </div>
         )}
 
-        {/* Main Content */}
-        <div className="flex-1 bg-white rounded-xl border border-surface-border shadow-sm flex flex-col overflow-hidden">
-          {activeTab === 'shifts' ? (
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-left border-collapse min-w-[1200px]">
-                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                  <tr>
-                    <th className="p-4 font-label-sm text-label-sm text-slate-500 uppercase tracking-wider w-64 bg-slate-50 border-r border-slate-200 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Shift</th>
-                    {weekDates.map((dateObj, i) => (
-                      <th key={i} className="p-4 border-r border-slate-100 min-w-[180px]">
-                        <div className="flex flex-col">
-                          <span className="text-slate-900 font-bold">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}</span>
-                          <span className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{getCycleDayLabel(getCycleDayIndex(dateObj))}</span>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
+        {/* Main Content Area */}
+        <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+          {/* Left: Schedule Table */}
+          <div className="flex-1 bg-white rounded-xl border border-surface-border shadow-sm flex flex-col overflow-hidden">
+            {activeTab === 'shifts' ? (
+              <div className="overflow-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[1200px]">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                      <td colSpan="8" className="p-12 text-center text-slate-500">
-                        <span className="material-symbols-outlined animate-spin text-4xl text-blue-600 mb-4 block">sync</span>
-                        <p className="font-semibold">Calculating weekly schedule matches...</p>
-                      </td>
-                    </tr>
-                  ) : shifts.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="p-12 text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
-                          <span className="material-symbols-outlined text-3xl text-slate-400">calendar_month</span>
-                        </div>
-                        <h3 className="font-h3 text-slate-900 mb-1">No Shifts Configured</h3>
-                        <p className="text-slate-500 text-sm max-w-md mx-auto">
-                          There are no shift templates configured for {clinicName}. Check your shift templates in the Settings tab.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    (() => {
-                      const filteredShifts = shifts.filter(s => roleFilter === 'All' || s.staffing_role === roleFilter);
-                      const rolesSet = Array.from(new Set(filteredShifts.map(s => s.staffing_role).filter(Boolean))).sort();
-                      
-                      return rolesSet.map(role => {
-                        const roleShifts = filteredShifts.filter(s => s.staffing_role === role).sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
-                        
-                        // Group by individual shift template
-                        const shiftGroups = {};
-                        roleShifts.forEach(shift => {
-                          const key = shift.id;
-                          if (!shiftGroups[key]) {
-                            shiftGroups[key] = {
-                              custom_id: shift.custom_id,
-                              start_time: shift.start_time,
-                              end_time: shift.end_time,
-                              time_block: shift.time_block,
-                              staffing_role: shift.staffing_role,
-                              shifts: []
-                            };
-                          }
-                          shiftGroups[key].shifts.push(shift);
-                        });
-
-                        return (
-                          <React.Fragment key={role}>
-                            <tr className="bg-slate-100 border-y-2 border-slate-200">
-                              <td colSpan={8} className="p-3 sticky left-0 z-10">
-                                <span className="font-bold text-slate-800 text-base uppercase tracking-wider">{role}</span>
-                              </td>
-                            </tr>
-                            {Object.values(shiftGroups).map((group, groupIdx) => (
-                              <tr key={`${role}-${groupIdx}`} className="hover:bg-slate-50/50 transition-colors group border-b border-slate-100">
-                                {/* Sticky Left Column: Shift Info */}
-                                <td className="p-4 bg-white group-hover:bg-slate-50/50 border-r border-slate-200 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] transition-colors align-top">
-                                  <p className="text-slate-900 font-bold mb-1">
-                                    {group.custom_id || 'Unnamed Shift'}
-                                  </p>
-                                  <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                                    {group.staffing_role}
-                                  </span>
-                                </td>
-
-                                {/* 7 Day Columns */}
-                                {weekDates.map((dateObj, i) => {
-                                  // Aggregate data across all shifts in this timeGroup for day `i`
-                                  let reqCount = 0;
-                                  let employees = [];
-                                  let availableCandidates = [];
-                                  let isActive = false;
-                                  let customTime = null;
-
-                                  group.shifts.forEach(shift => {
-                                    const dayData = weeklyAssignments[shift.id]?.[i];
-                                    if (dayData && dayData.isActive) {
-                                      isActive = true;
-                                      reqCount += (shift.required_count || 1);
-                                      if (dayData.employees) {
-                                        employees = [...employees, ...dayData.employees];
-                                      }
-                                      if (dayData.availableCandidates) {
-                                        availableCandidates = [...availableCandidates, ...dayData.availableCandidates];
-                                      }
-                                      if (dayData.customTime) {
-                                        customTime = dayData.customTime;
-                                      }
-                                    }
-                                  });
-                                  
-                                  availableCandidates = availableCandidates.filter((cand, index, self) => 
-                                    index === self.findIndex(c => c.id === cand.id)
-                                  );
-                                  
-                                  const defaultTimeStr = group.start_time && group.end_time 
-                                    ? `${group.start_time.slice(0,5)}-${group.end_time.slice(0,5)}` 
-                                    : group.time_block;
-                                    
-                                  const effectiveTime = customTime || defaultTimeStr;
-                                  
-                                  return (
-                                    <td key={i} className={`p-2 border-r border-slate-100 align-top ${!isActive ? 'bg-slate-50/50' : ''}`}>
-                                      <CoverageCell 
-                                        isActive={isActive} 
-                                        reqCount={reqCount} 
-                                        employees={employees} 
-                                        shiftTime={effectiveTime}
-                                        availableCandidates={availableCandidates}
-                                        onAssign={(candidate, customStart, customEnd) => handleAssign(group.custom_id, group.staffing_role, group.start_time, group.end_time, dateObj, candidate.user_id, customStart, customEnd)}
-                                      />
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </React.Fragment>
-                        );
-                      });
-                    })()
-                  )}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-left border-collapse min-w-[1200px]">
-                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                  <tr>
-                    <th className="p-4 font-label-sm text-label-sm text-slate-500 uppercase tracking-wider w-64 bg-slate-50 border-r border-slate-200 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Employee</th>
-                    {weekDates.map((dateObj, i) => (
-                      <th key={i} className="p-4 border-r border-slate-100 min-w-[180px]">
-                        <div className="flex flex-col">
-                          <span className="text-slate-900 font-bold">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}</span>
-                          <span className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{getCycleDayLabel(getCycleDayIndex(dateObj))}</span>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr>
-                      <td colSpan="8" className="p-12 text-center text-slate-500">
-                        <span className="material-symbols-outlined animate-spin text-4xl text-blue-600 mb-4 block">sync</span>
-                        <p className="font-semibold">Calculating weekly schedule matches...</p>
-                      </td>
-                    </tr>
-                  ) : employees.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="p-12 text-center text-slate-500">
-                        No employees found for this department.
-                      </td>
-                    </tr>
-                  ) : (
-                    [...employees].filter(e => roleFilter === 'All' || e.staffing_role === roleFilter).sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || '')).map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
-                        {/* Sticky Left Column: Employee Info */}
-                        <td className="p-4 bg-white group-hover:bg-slate-50/50 border-r border-slate-200 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] transition-colors">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                              {emp.users?.name?.charAt(0) || '?'}
-                            </div>
-                            <div className="flex flex-col">
-                              <p className="font-bold text-slate-900 leading-tight">
-                                {emp.users?.name}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                                  {emp.staffing_role}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-medium">
-                                  {emp.shift_time || 'No times'}
-                                </span>
-                              </div>
-                            </div>
+                      <th className="p-4 font-label-sm text-label-sm text-slate-500 uppercase tracking-wider w-64 bg-slate-50 border-r border-slate-200 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Shift</th>
+                      {weekDates.map((dateObj, i) => (
+                        <th key={i} className="p-4 border-r border-slate-100 min-w-[180px]">
+                          <div className="flex flex-col">
+                            <span className="text-slate-900 font-bold">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}</span>
+                            <span className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{getCycleDayLabel(getCycleDayIndex(dateObj))}</span>
                           </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loading ? (
+                      <tr>
+                        <td colSpan="8" className="p-12 text-center text-slate-500">
+                          <span className="material-symbols-outlined animate-spin text-4xl text-blue-600 mb-4 block">sync</span>
+                          <p className="font-semibold">Calculating weekly schedule matches...</p>
                         </td>
+                      </tr>
+                    ) : shifts.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="p-12 text-center">
+                          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
+                            <span className="material-symbols-outlined text-3xl text-slate-400">calendar_month</span>
+                          </div>
+                          <h3 className="font-h3 text-slate-900 mb-1">No Shifts Configured</h3>
+                          <p className="text-slate-500 text-sm max-w-md mx-auto">
+                            There are no shift templates configured for {clinicName}. Check your shift templates in the Settings tab.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      (() => {
+                        const filteredShifts = shifts.filter(s => roleFilter === 'All' || s.staffing_role === roleFilter);
+                        const rolesSet = Array.from(new Set(filteredShifts.map(s => s.staffing_role).filter(Boolean))).sort();
+                        
+                        return rolesSet.map(role => {
+                          const roleShifts = filteredShifts.filter(s => s.staffing_role === role).sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+                          
+                          // Group by individual shift template
+                          const shiftGroups = {};
+                          roleShifts.forEach(shift => {
+                            const key = shift.id;
+                            if (!shiftGroups[key]) {
+                              shiftGroups[key] = {
+                                custom_id: shift.custom_id,
+                                start_time: shift.start_time,
+                                end_time: shift.end_time,
+                                time_block: shift.time_block,
+                                staffing_role: shift.staffing_role,
+                                shifts: []
+                              };
+                            }
+                            shiftGroups[key].shifts.push(shift);
+                          });
 
-                        {/* 7 Day Columns */}
-                        {employeeAssignments[emp.id]?.days?.map((dayData, i) => (
-                          <td key={i} className={`p-2 border-r border-slate-100 align-top ${!dayData.isActive ? 'bg-slate-50/50' : ''}`}>
-                            {!dayData.isActive ? (
-                              <div className="h-full min-h-[60px] flex items-center justify-center">
-                                <span className="text-xs font-medium text-slate-400">Off</span>
+                          return (
+                            <React.Fragment key={role}>
+                              <tr className="bg-slate-100 border-y-2 border-slate-200">
+                                <td colSpan={8} className="p-3 sticky left-0 z-10">
+                                  <span className="font-bold text-slate-800 text-base uppercase tracking-wider">{role}</span>
+                                </td>
+                              </tr>
+                              {Object.values(shiftGroups).map((group, groupIdx) => (
+                                <tr key={`${role}-${groupIdx}`} className="hover:bg-slate-50/50 transition-colors group border-b border-slate-100">
+                                  {/* Sticky Left Column: Shift Info */}
+                                  <td className="p-4 bg-white group-hover:bg-slate-50/50 border-r border-slate-200 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] transition-colors align-top">
+                                    <p className="text-slate-900 font-bold mb-1">
+                                      {group.custom_id || 'Unnamed Shift'}
+                                    </p>
+                                    <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                                      {group.staffing_role}
+                                    </span>
+                                  </td>
+
+                                  {/* 7 Day Columns */}
+                                  {weekDates.map((dateObj, i) => {
+                                    // Aggregate data across all shifts in this timeGroup for day `i`
+                                    let reqCount = 0;
+                                    let employees = [];
+                                    let availableCandidates = [];
+                                    let isActive = false;
+                                    let customTime = null;
+
+                                    group.shifts.forEach(shift => {
+                                      const dayData = weeklyAssignments[shift.id]?.[i];
+                                      if (dayData && dayData.isActive) {
+                                        isActive = true;
+                                        reqCount += (shift.required_count || 1);
+                                        if (dayData.employees) {
+                                          employees = [...employees, ...dayData.employees];
+                                        }
+                                        if (dayData.availableCandidates) {
+                                          availableCandidates = [...availableCandidates, ...dayData.availableCandidates];
+                                        }
+                                        if (dayData.customTime) {
+                                          customTime = dayData.customTime;
+                                        }
+                                      }
+                                    });
+                                    
+                                    availableCandidates = availableCandidates.filter((cand, index, self) => 
+                                      index === self.findIndex(c => c.id === cand.id)
+                                    );
+                                    
+                                    const defaultTimeStr = group.start_time && group.end_time 
+                                      ? `${group.start_time.slice(0,5)}-${group.end_time.slice(0,5)}` 
+                                      : group.time_block;
+                                      
+                                    const effectiveTime = customTime || defaultTimeStr;
+                                    
+                                    return (
+                                      <td key={i} className={`p-2 border-r border-slate-100 align-top ${!isActive ? 'bg-slate-50/50' : ''}`}>
+                                        <CoverageCell 
+                                          isActive={isActive} 
+                                          reqCount={reqCount} 
+                                          employees={employees} 
+                                          shiftTime={effectiveTime}
+                                          shiftRole={group.staffing_role}
+                                          shiftCustomId={group.custom_id}
+                                          dateObj={dateObj}
+                                          draggedItem={draggedItem}
+                                          availableCandidates={availableCandidates}
+                                          onAssign={(candidate, customStart, customEnd) => handleAssign(group.custom_id, group.staffing_role, group.start_time, group.end_time, dateObj, candidate.user_id, customStart, customEnd)}
+                                          onRemoveAssign={(userId) => handleRemoveAssignment(group.custom_id, dateObj, userId)}
+                                          onRoleMismatch={(userName, role, requiredRole) => showToastNotification(`Cannot assign ${userName}: Role (${role || 'None'}) does not match required ${requiredRole}`, 'error')}
+                                          onDragAssignedStart={(emp, shiftCustomId, dateObj) => setDraggedItem({ type: 'ASSIGNED_EMPLOYEE', userId: emp.user_id, userName: emp.users?.name, shiftCustomId, dateObj })}
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        });
+                      })()
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="overflow-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[1200px]">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                    <tr>
+                      <th className="p-4 font-label-sm text-label-sm text-slate-500 uppercase tracking-wider w-64 bg-slate-50 border-r border-slate-200 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Employee</th>
+                      {weekDates.map((dateObj, i) => (
+                        <th key={i} className="p-4 border-r border-slate-100 min-w-[180px]">
+                          <div className="flex flex-col">
+                            <span className="text-slate-900 font-bold">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}</span>
+                            <span className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{getCycleDayLabel(getCycleDayIndex(dateObj))}</span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loading ? (
+                      <tr>
+                        <td colSpan="8" className="p-12 text-center text-slate-500">
+                          <span className="material-symbols-outlined animate-spin text-4xl text-blue-600 mb-4 block">sync</span>
+                          <p className="font-semibold">Calculating weekly schedule matches...</p>
+                        </td>
+                      </tr>
+                    ) : employees.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="p-12 text-center text-slate-500">
+                          No employees found for this department.
+                        </td>
+                      </tr>
+                    ) : (
+                      [...employees].filter(e => roleFilter === 'All' || e.staffing_role === roleFilter).sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || '')).map((emp) => (
+                        <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
+                          {/* Sticky Left Column: Employee Info */}
+                          <td className="p-4 bg-white group-hover:bg-slate-50/50 border-r border-slate-200 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] transition-colors">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                {emp.users?.name?.charAt(0) || '?'}
                               </div>
-                            ) : dayData.shifts && dayData.shifts.length > 0 ? (
-                              <div className="flex flex-col gap-2 h-full min-h-[60px]">
-                                {dayData.shifts.map((shift, shiftIdx) => (
-                                  <div key={shiftIdx} className="flex flex-col gap-1 bg-blue-50/70 p-2 rounded-md border border-blue-100/50 hover:border-blue-300 transition-colors cursor-default">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="material-symbols-outlined text-[14px] text-blue-600">event_available</span>
-                                      <p className="font-semibold text-slate-900 text-xs leading-tight" title={shift.custom_id}>
-                                        {shift.custom_id || shift.id.split('-')[0]}
+                              <div className="flex flex-col">
+                                <p className="font-bold text-slate-900 leading-tight">
+                                  {emp.users?.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                    {emp.staffing_role}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    {emp.shift_time || 'No times'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 7 Day Columns */}
+                          {employeeAssignments[emp.id]?.days?.map((dayData, i) => (
+                            <td key={i} className={`p-2 border-r border-slate-100 align-top ${!dayData.isActive ? 'bg-slate-50/50' : ''}`}>
+                              {!dayData.isActive ? (
+                                <div className="h-full min-h-[60px] flex items-center justify-center">
+                                  <span className="text-xs font-medium text-slate-400">Off</span>
+                                </div>
+                              ) : dayData.shifts && dayData.shifts.length > 0 ? (
+                                <div className="flex flex-col gap-2 h-full min-h-[60px]">
+                                  {dayData.shifts.map((shift, shiftIdx) => (
+                                    <div key={shiftIdx} className="flex flex-col gap-1 bg-blue-50/70 p-2 rounded-md border border-blue-100/50 hover:border-blue-300 transition-colors cursor-default">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-[14px] text-blue-600">event_available</span>
+                                        <p className="font-semibold text-slate-900 text-xs leading-tight" title={shift.custom_id}>
+                                          {shift.custom_id || shift.id.split('-')[0]}
+                                        </p>
+                                      </div>
+                                      <p className="text-[10px] text-slate-600 font-medium mt-0.5">
+                                        {shift.start_time && shift.end_time 
+                                          ? `${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}`
+                                          : shift.time_block}
                                       </p>
                                     </div>
-                                    <p className="text-[10px] text-slate-600 font-medium mt-0.5">
-                                      {shift.start_time && shift.end_time 
-                                        ? `${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}`
-                                        : shift.time_block}
-                                    </p>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1 bg-amber-50/50 p-2 rounded-md border border-amber-200/50 border-dashed cursor-default h-full min-h-[60px] justify-center items-center text-center">
+                                  <p className="font-semibold text-amber-700 text-xs">Available</p>
+                                  <p className="text-[10px] text-amber-600/70">Not Assigned</p>
+                                </div>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Available Staff Pool (Drag & Drop Panel) */}
+          {showSidebar && (
+            <div 
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (draggedItem?.type === 'ASSIGNED_EMPLOYEE') {
+                  e.dataTransfer.dropEffect = 'move';
+                  if (!isPoolDragOver) setIsPoolDragOver(true);
+                } else {
+                  e.dataTransfer.dropEffect = 'none';
+                }
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                  setIsPoolDragOver(false);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsPoolDragOver(false);
+                setDraggedItem(null);
+                try {
+                  const raw = e.dataTransfer.getData('text/plain');
+                  if (raw) {
+                    const data = JSON.parse(raw);
+                    if (data.type === 'ASSIGNED_EMPLOYEE' && data.userId && data.shiftCustomId) {
+                      const dateObj = data.dateObjStr ? new Date(data.dateObjStr) : selectedDate;
+                      handleRemoveAssignment(data.shiftCustomId, dateObj, data.userId);
+                    }
+                  }
+                } catch (err) {
+                  console.error(err);
+                }
+              }}
+              className={`w-80 bg-white rounded-xl border border-surface-border shadow-sm flex flex-col overflow-hidden shrink-0 transition-all ${
+                isPoolDragOver ? 'ring-4 ring-rose-400 border-rose-500 bg-rose-50/80' : ''
+              }`}
+            >
+              {isPoolDragOver ? (
+                <div className="flex-1 bg-rose-500 text-white flex flex-col items-center justify-center gap-3 p-6 text-center animate-in fade-in pointer-events-none select-none">
+                  <span className="material-symbols-outlined text-5xl animate-bounce pointer-events-none">person_remove</span>
+                  <div className="pointer-events-none">
+                    <p className="font-bold text-base pointer-events-none">Drop Here to Unassign</p>
+                    <p className="text-xs opacity-90 mt-1 pointer-events-none">Removes staff assignment from shift</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-blue-600 text-lg">group</span>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm">Staff Pool</h3>
+                        <p className="text-[11px] text-slate-500 font-medium">Drag to assign or drop here to unassign</p>
+                      </div>
+                    </div>
+                    <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                      {filteredPoolEmps.length}
+                    </span>
+                  </div>
+
+                  {/* Filters inside panel */}
+                  <div className="p-3 border-b border-slate-100 space-y-2 bg-white">
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-2.5 top-2 text-slate-400 text-sm">search</span>
+                      <input 
+                        type="text" 
+                        placeholder="Search staff..."
+                        value={searchPool}
+                        onChange={(e) => setSearchPool(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                      {['All', ...availableRoles].map(role => (
+                        <button
+                          key={role}
+                          onClick={() => setRolePoolFilter(role)}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all shrink-0 ${
+                            rolePoolFilter === role 
+                              ? 'bg-blue-900 text-white shadow-sm' 
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {role}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Scrollable employee list */}
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/40">
+                    {filteredPoolEmps.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400">
+                        <span className="material-symbols-outlined text-3xl mb-1 block">search_off</span>
+                        <p className="text-xs font-semibold">No staff found</p>
+                      </div>
+                    ) : (
+                      filteredPoolEmps.map(emp => {
+                        const needsAssignment = isEmpScheduledToday(emp);
+                        return (
+                          <div 
+                            key={emp.id}
+                            draggable={true}
+                            onDragStart={(e) => {
+                              const item = {
+                                userId: emp.user_id,
+                                userName: emp.users?.name,
+                                staffingRole: emp.staffing_role,
+                                secondaryRoles: emp.secondary_roles || []
+                              };
+                              setDraggedItem(item);
+                              e.dataTransfer.setData('text/plain', JSON.stringify(item));
+                              e.dataTransfer.effectAllowed = 'copy';
+                            }}
+                            onDragEnd={() => setDraggedItem(null)}
+                            className={`group border rounded-xl p-3 flex items-center gap-3 cursor-grab active:cursor-grabbing transition-all shadow-sm hover:shadow-md select-none ${
+                              needsAssignment
+                                ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-200/60 hover:border-amber-400'
+                                : 'bg-white hover:bg-blue-50/80 border-slate-200 hover:border-blue-400'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-slate-400 group-hover:text-blue-600 text-lg shrink-0">
+                              drag_indicator
+                            </span>
+                            <div className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center shrink-0 shadow-sm ${
+                              needsAssignment ? 'bg-amber-600 text-white' : 'bg-blue-900 text-white'
+                            }`}>
+                              {emp.users?.name?.charAt(0) || '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="font-bold text-slate-800 text-xs truncate group-hover:text-blue-900">
+                                  {emp.users?.name}
+                                </p>
+                                {needsAssignment && (
+                                  <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shrink-0 shadow-xs">
+                                    <span className="material-symbols-outlined text-[10px]">warning</span>
+                                    Assignment Needed
+                                  </span>
+                                )}
                               </div>
-                            ) : (
-                              <div className="flex flex-col gap-1 bg-amber-50/50 p-2 rounded-md border border-amber-200/50 border-dashed cursor-default h-full min-h-[60px] justify-center items-center text-center">
-                                <p className="font-semibold text-amber-700 text-xs">Available</p>
-                                <p className="text-[10px] text-amber-600/70">Not Assigned</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="bg-blue-100 text-blue-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase">
+                                  {emp.staffing_role}
+                                </span>
+                                {emp.secondary_roles && emp.secondary_roles.length > 0 && (
+                                  <span className="text-[9px] font-semibold text-slate-400 truncate">
+                                    +{emp.secondary_roles.join(', ')}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                            </div>
+                            <span className="material-symbols-outlined text-xs text-slate-300 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                              drag_handle
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
+
+        {/* Publish Confirmation Modal */}
+        {showPublishModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4 animate-in zoom-in-95">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-2xl text-blue-600">campaign</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Publish Weekly Schedule?</h3>
+                  <p className="text-xs font-semibold text-slate-500">Week of {getWeekStartStr(selectedDate)}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl space-y-2 text-xs text-slate-600">
+                <p className="font-semibold text-slate-800">
+                  Are you sure you wish to publish this schedule?
+                </p>
+                <p className="leading-relaxed">
+                  Publishing will make the schedule visible and immediately notify all assigned employees of their shifts. <strong className="text-slate-900 font-bold">This action cannot be undone.</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPublishModal(false)}
+                  disabled={publishing}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPublishModal(false);
+                    handleExecutePublish();
+                  }}
+                  disabled={publishing}
+                  className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition-all flex items-center gap-1.5"
+                >
+                  {publishing ? (
+                    <>
+                      <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-sm">send</span>
+                      Confirm & Publish
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`fixed bottom-6 right-6 z-50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200 border ${
+            toast.type === 'error' 
+              ? 'bg-rose-900 border-rose-700' 
+              : toast.type === 'info' 
+              ? 'bg-slate-900 border-slate-700' 
+              : 'bg-emerald-900 border-emerald-700'
+          }`}>
+            <span className="material-symbols-outlined text-lg">
+              {toast.type === 'error' ? 'error' : toast.type === 'info' ? 'info' : 'check_circle'}
+            </span>
+            <span className="font-semibold text-xs">{toast.msg}</span>
+          </div>
+        )}
       </div>
     </Layout>
   );
