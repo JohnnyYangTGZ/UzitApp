@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useScheduleData } from '../hooks/useScheduleData';
@@ -8,6 +9,7 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function StaffSchedule() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const { fetchMySchedule, loading } = useScheduleData();
   const [shifts, setShifts] = useState([]);
   const [timeOffs, setTimeOffs] = useState([]);
@@ -16,6 +18,7 @@ export default function StaffSchedule() {
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [activeDateMenu, setActiveDateMenu] = useState(null);
   const [selectedDateForModal, setSelectedDateForModal] = useState('');
+  const [selectedDayDetails, setSelectedDayDetails] = useState(null);
 
   const [publicationsMap, setPublicationsMap] = useState({});
 
@@ -154,6 +157,16 @@ export default function StaffSchedule() {
 
   const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
+  useEffect(() => {
+    const targetDate = searchParams.get('date');
+    if (targetDate && calendarDays && calendarDays.length > 0) {
+      const matchingDay = calendarDays.find(d => d.dateStr === targetDate);
+      if (matchingDay) {
+        setSelectedDayDetails(matchingDay);
+      }
+    }
+  }, [searchParams, calendarDays]);
+
   // Calculate stats
   const totalApprovedDays = timeOffs.filter(t => t.status === 'approved').reduce((acc, curr) => {
     const start = new Date(curr.start_date);
@@ -255,6 +268,17 @@ export default function StaffSchedule() {
                   
                   {activeDateMenu === day.dateStr && (
                     <div className="absolute top-8 left-2 right-2 bg-white rounded-lg shadow-lg border border-slate-200 z-10 overflow-hidden flex flex-col animate-fade-in">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDayDetails(day);
+                          setActiveDateMenu(null);
+                        }}
+                        className="text-left px-3 py-2 text-sm text-slate-800 font-bold hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-blue-600">info</span>
+                        View Shift & Day Details
+                      </button>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -436,6 +460,136 @@ export default function StaffSchedule() {
             userId={user.id}
             initialDate={selectedDateForModal}
           />
+
+          {/* Date & Shift Details Modal */}
+          {selectedDayDetails && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+              <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-5">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-lg">
+                      <span className="material-symbols-outlined text-[22px]">calendar_today</span>
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-slate-900">
+                        {selectedDayDetails.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">Daily Shift & Attendance Overview</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedDayDetails(null)}
+                    className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Shift Assignments for this day */}
+                  {selectedDayDetails.shifts && selectedDayDetails.shifts.length > 0 ? (
+                    selectedDayDetails.shifts.map((assignment, idx) => {
+                      const published = isShiftPublished(assignment);
+                      return (
+                        <div key={idx} className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Shift</span>
+                            {published ? (
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Published Schedule
+                              </span>
+                            ) : (
+                              <span className="bg-slate-200 text-slate-700 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                Draft Schedule
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-500">Clinic / Location</p>
+                              <p className="text-sm font-bold text-slate-900 mt-0.5">
+                                {assignment.shifts?.location?.name || 'Geary Clinic'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-slate-500">Shift Window</p>
+                              <p className="text-sm font-bold text-slate-900 mt-0.5">
+                                {assignment.shifts?.start_time && assignment.shifts?.end_time
+                                  ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
+                                  : `${assignment.shifts?.time_block || 'Regular'} Shift`}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 text-center text-slate-500 text-xs py-5">
+                      <span className="material-symbols-outlined text-2xl text-slate-400 block mb-1">event_busy</span>
+                      No working shift scheduled for this date (Scheduled Off).
+                    </div>
+                  )}
+
+                  {/* Time Off Requests for this day */}
+                  {selectedDayDetails.timeOffs && selectedDayDetails.timeOffs.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Time Off Request Status</p>
+                      {selectedDayDetails.timeOffs.map((to, idx) => (
+                        <div key={idx} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-sm text-slate-800">{to.time_off_type_code || 'Time Off'}</span>
+                            <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                              to.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                              to.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              {to.status}
+                            </span>
+                          </div>
+                          {to.reason && <p className="text-xs text-slate-600 italic">"Reason: {to.reason}"</p>}
+                          {to.manager_note && (
+                            <p className="text-xs text-rose-700 font-semibold bg-rose-50 p-2 rounded-lg border border-rose-100">
+                              Manager Note: {to.manager_note}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDateForModal(selectedDayDetails.dateStr);
+                      setIsModalOpen(true);
+                      setSelectedDayDetails(null);
+                    }}
+                    className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">event_busy</span>
+                    Request Time Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDateForModal(selectedDayDetails.dateStr);
+                      setIsAvailabilityModalOpen(true);
+                      setSelectedDayDetails(null);
+                    }}
+                    className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2.5 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">event_available</span>
+                    Provide Availability
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </Layout>

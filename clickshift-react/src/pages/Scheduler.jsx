@@ -794,8 +794,50 @@ export default function Scheduler() {
   };
 
   const triggerScheduleChangeNotification = async ({ userId, action, shiftCustomId, dateStr }) => {
-    // Framework hook for notification dispatch
-    console.log(`[PUSH NOTIFICATION FRAMEWORK] Live schedule change alert for user ${userId}: ${action} on ${shiftCustomId} (${dateStr})`);
+    const emp = employees.find(e => e.user_id === userId);
+    const empName = emp?.users?.name || 'Staff';
+    const clinicNameStr = clinics.find(c => c.id === selectedClinicId)?.name || 'Clinic';
+
+    const msg = action === 'ASSIGNED' 
+      ? `Schedule Update: Assigned to ${shiftCustomId} on ${dateStr}`
+      : `Schedule Update: Unassigned from ${shiftCustomId} on ${dateStr}`;
+
+    console.log(`[NOTIFICATION DISPATCH] ${msg} for user ${userId}`);
+
+    try {
+      await supabase.from('audit_logs').insert([{
+        action_type: 'SCHEDULE_CHANGE',
+        target_type: 'shift_assignment',
+        metadata: {
+          userId,
+          userName: empName,
+          action,
+          shiftCustomId,
+          dateStr,
+          message: msg,
+          clinicName: clinicNameStr,
+          timestamp: new Date().toISOString()
+        }
+      }]);
+    } catch (err) {
+      console.warn('Failed to insert audit log notification:', err);
+    }
+
+    try {
+      const storageKey = `notifs_${userId}`;
+      const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const newNotif = {
+        id: Date.now(),
+        userId,
+        action,
+        shiftCustomId,
+        dateStr,
+        message: msg,
+        timestamp: new Date().toISOString()
+      };
+      existing.unshift(newNotif);
+      localStorage.setItem(storageKey, JSON.stringify(existing.slice(0, 20)));
+    } catch(e) {}
   };
 
   const getWeekStartStr = (dateStr) => {

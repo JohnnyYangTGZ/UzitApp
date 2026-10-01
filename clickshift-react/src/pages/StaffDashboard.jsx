@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -6,10 +7,12 @@ import TimeOffRequestModal from '../components/TimeOffRequestModal';
 
 export default function StaffDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const firstName = user?.name ? user.name.split(' ')[0] : 'Staff';
 
   const [upcomingShift, setUpcomingShift] = useState(null);
   const [recentRequests, setRecentRequests] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -141,6 +144,44 @@ export default function StaffDashboard() {
         .limit(4);
       setRecentRequests(requests || []);
 
+      // Fetch notifications from audit_logs and merge with localStorage
+      const notifList = [];
+      try {
+        const { data: dbLogs } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .eq('action_type', 'SCHEDULE_CHANGE')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (dbLogs) {
+          dbLogs.forEach(log => {
+            if (log.metadata && (log.metadata.userId === user.id || log.metadata.user_id === user.id)) {
+              notifList.push({
+                id: log.id,
+                message: log.metadata.message || `Schedule change for ${log.metadata.dateStr}`,
+                dateStr: log.metadata.dateStr,
+                action: log.metadata.action,
+                shiftCustomId: log.metadata.shiftCustomId,
+                timestamp: log.created_at
+              });
+            }
+          });
+        }
+      } catch(e) {}
+
+      try {
+        const localNotifs = JSON.parse(localStorage.getItem(`notifs_${user.id}`) || '[]');
+        localNotifs.forEach(ln => {
+          if (!notifList.some(n => n.dateStr === ln.dateStr && n.action === ln.action && n.shiftCustomId === ln.shiftCustomId)) {
+            notifList.push(ln);
+          }
+        });
+      } catch(e) {}
+
+      notifList.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setNotifications(notifList.slice(0, 6));
+
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -235,6 +276,60 @@ export default function StaffDashboard() {
               )}
             </div>
             <div className="absolute right-0 bottom-0 translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors"></div>
+          </section>
+
+          {/* Schedule Change Notifications Card */}
+          <section className="bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-surface-border flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-600 text-xl">notifications</span>
+                <h3 className="font-h3 text-h3 text-slate-900">Schedule Updates & Notifications</h3>
+              </div>
+              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Live Updates</span>
+            </div>
+            <div className="divide-y divide-surface-border">
+              {loading ? (
+                <div className="p-6 text-slate-500 text-center">Loading notifications...</div>
+              ) : notifications.length === 0 ? (
+                <div className="p-6 text-slate-400 text-center text-sm italic">
+                  No recent schedule updates. Any live changes to your published schedule will appear here.
+                </div>
+              ) : (
+                notifications.map(notif => (
+                  <div 
+                    key={notif.id}
+                    onClick={() => navigate(`/my-schedule?date=${notif.dateStr}`)}
+                    className="p-5 flex items-center justify-between hover:bg-amber-50/30 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                        notif.action === 'UNASSIGNED' 
+                          ? 'bg-rose-100 text-rose-700' 
+                          : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        <span className="material-symbols-outlined text-[20px]">
+                          {notif.action === 'UNASSIGNED' ? 'event_busy' : 'event_available'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">
+                          {notif.message}
+                        </p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-2">
+                          <span>Target Date: <strong className="text-slate-700">{formatDate(notif.dateStr)}</strong></span>
+                          <span>&bull;</span>
+                          <span>{new Date(notif.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
+                      <span className="text-xs font-bold">View Shift</span>
+                      <span className="material-symbols-outlined text-sm">chevron_right</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </section>
 
           <section className="bg-white border border-surface-border rounded-xl shadow-sm">
