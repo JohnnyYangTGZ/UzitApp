@@ -1,17 +1,146 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useLocationContext } from '../context/LocationContext';
 import { supabase } from '../lib/supabaseClient';
 
+const formatDateRange = (startStr, endStr) => {
+  if (!startStr) return '';
+  const parseD = (s) => {
+    const [y, m, d] = s.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  if (startStr === endStr) return parseD(startStr);
+  return `${parseD(startStr)} - ${parseD(endStr)}`;
+};
+
+const formatTimeRange = (startTime, endTime) => {
+  if (startTime && endTime) {
+    const fmt = (t) => {
+      const [h, m] = t.split(':');
+      const d = new Date();
+      d.setHours(parseInt(h, 10), parseInt(m, 10));
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    };
+    return `${fmt(startTime)} - ${fmt(endTime)}`;
+  }
+  return 'Full Shift';
+};
+
+const getTypeCodeLabel = (code) => {
+  switch (code) {
+    case 'VAC': return 'PTO / Vacation';
+    case 'PTO': return 'Paid Time Off';
+    case 'SCK': return 'Sick Leave';
+    case 'LOA': return 'Leave of Absence';
+    case 'OFF': return 'Unpaid Leave';
+    default: return code || 'Time Off';
+  }
+};
+
 export default function ManagerDashboard() {
   const { user } = useAuth();
   const { clinics, selectedClinicId } = useLocationContext();
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay()); // 0-6 (Sun-Sat)
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('All Staff');
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const fetchPendingRequests = async () => {
+    if (!selectedClinicId) return;
+    setLoadingRequests(true);
+
+    try {
+      const { data: clinicUsers } = await supabase
+        .from('employee_clinics')
+        .select('user_id')
+        .eq('clinic_id', selectedClinicId);
+
+      const userIds = (clinicUsers || []).map(cu => cu.user_id);
+      if (userIds.length === 0) {
+        setPendingRequests([]);
+        setLoadingRequests(false);
+        return;
+      }
+
+      const { data: requests, error } = await supabase
+        .from('time_off_requests')
+        .select(`
+          *,
+          users!time_off_requests_user_id_fkey (
+            id,
+            name,
+            email,
+            employee_profiles (
+              job_title,
+              staffing_role,
+              employee_code
+            )
+          )
+        `)
+        .eq('status', 'pending')
+        .in('user_id', userIds)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPendingRequests(requests || []);
+    } catch (err) {
+      console.error('Error fetching pending time off requests:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingRequests();
+  }, [selectedClinicId]);
+
+  const handleApproveRequest = async (requestId) => {
+    try {
+      const { error } = await supabase
+        .from('time_off_requests')
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user?.id
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      fetchPendingRequests();
+      setWeekOffset(w => w);
+    } catch (err) {
+      console.error('Error approving time off request:', err);
+      alert('Failed to approve request: ' + err.message);
+    }
+  };
+
+  const handleDenyRequest = async (requestId) => {
+    try {
+      const { error } = await supabase
+        .from('time_off_requests')
+        .update({
+          status: 'denied',
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user?.id
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      fetchPendingRequests();
+    } catch (err) {
+      console.error('Error denying time off request:', err);
+      alert('Failed to deny request: ' + err.message);
+    }
+  };
   
   const [dashboardData, setDashboardData] = useState({
     weeklyCoverage: [],
@@ -433,138 +562,109 @@ export default function ManagerDashboard() {
           </div>
         </div>
 
-        {/* Pending PTO Requests (Mocked) */}
+        {/* Pending Time Off Requests (Live Database Linked) */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-h2 font-h2 text-on-background">
               Pending Time Off Requests
             </h2>
-            <button className="text-primary font-label-sm hover:underline">View All Requests</button>
+            <button 
+              onClick={() => navigate('/manager/calendar')} 
+              className="text-primary font-label-sm hover:underline"
+            >
+              View All Requests
+            </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Mock Card 1 */}
-            <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5 flex flex-col gap-4 relative overflow-hidden transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-lg border border-orange-100">
-                    S
-                  </div>
-                  <div>
-                    <p className="font-bold text-on-surface">Sarah Jenkins</p>
-                    <p className="text-xs text-on-surface-variant font-medium">Medical Assistant</p>
-                  </div>
-                </div>
-                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>
-              </div>
-              
-              <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">calendar_month</span> Dates</span>
-                  <span className="text-sm font-bold text-slate-700">Oct 12 - Oct 15</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">schedule</span> Time</span>
-                  <span className="text-sm font-bold text-slate-700">Full Shift</span>
-                </div>
-                <div className="w-full h-px bg-slate-200"></div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">beach_access</span> Type</span>
-                  <span className="text-sm font-bold text-slate-700">PTO / Vacation</span>
-                </div>
-              </div>
-              
-              <p className="text-sm text-slate-600 italic">"Taking a family trip out of state."</p>
-              
-              <div className="flex gap-3 mt-2">
-                <button className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors">Deny</button>
-                <button className="flex-1 bg-primary hover:bg-primary/90 text-white shadow-sm hover:shadow py-2 rounded-lg text-sm font-bold transition-all">Approve</button>
-              </div>
+          {loadingRequests ? (
+            <div className="p-8 bg-white rounded-xl border border-surface-border text-center text-slate-400">
+              Loading pending requests...
             </div>
-
-            {/* Mock Card 2 */}
-            <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5 flex flex-col gap-4 relative overflow-hidden transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg border border-blue-100">
-                    M
-                  </div>
-                  <div>
-                    <p className="font-bold text-on-surface">Marcus Thorne</p>
-                    <p className="text-xs text-on-surface-variant font-medium">Registered Nurse</p>
-                  </div>
-                </div>
-                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>
-              </div>
-              
-              <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">calendar_month</span> Dates</span>
-                  <span className="text-sm font-bold text-slate-700">Nov 02</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">schedule</span> Time</span>
-                  <span className="text-sm font-bold text-slate-700">08:00 - 12:00</span>
-                </div>
-                <div className="w-full h-px bg-slate-200"></div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">medical_services</span> Type</span>
-                  <span className="text-sm font-bold text-slate-700">Sick Leave</span>
-                </div>
-              </div>
-              
-              <p className="text-sm text-slate-600 italic">"Scheduled dental surgery."</p>
-              
-              <div className="flex gap-3 mt-2">
-                <button className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors">Deny</button>
-                <button className="flex-1 bg-primary hover:bg-primary/90 text-white shadow-sm hover:shadow py-2 rounded-lg text-sm font-bold transition-all">Approve</button>
-              </div>
+          ) : pendingRequests.length === 0 ? (
+            <div className="bg-white rounded-xl border border-surface-border p-8 text-center text-slate-500 shadow-sm flex flex-col items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-3xl text-emerald-500">check_circle</span>
+              <p className="font-semibold text-slate-700">No pending time off requests</p>
+              <p className="text-xs text-slate-400">All staff time off requests for this clinic have been reviewed.</p>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {pendingRequests.map(req => {
+                const empProfile = req.users?.employee_profiles?.[0];
+                const empName = req.users?.name || 'Staff Member';
+                const empRole = empProfile?.job_title || empProfile?.staffing_role || 'Staff';
+                const firstLetter = empName.charAt(0).toUpperCase();
 
-            {/* Mock Card 3 */}
-            <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5 flex flex-col gap-4 relative overflow-hidden transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-lg border border-purple-100">
-                    E
+                return (
+                  <div key={req.id} className="bg-white rounded-xl border border-surface-border shadow-sm p-5 flex flex-col gap-4 relative overflow-hidden transition-all hover:shadow-md">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-lg border border-amber-200">
+                          {firstLetter}
+                        </div>
+                        <div>
+                          <p className="font-bold text-on-surface">{empName}</p>
+                          <p className="text-xs text-on-surface-variant font-medium">{empRole}</p>
+                        </div>
+                      </div>
+                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>
+                    </div>
+                    
+                    <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-100 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[14px]">calendar_month</span> Dates
+                        </span>
+                        <span className="text-sm font-bold text-slate-700">
+                          {formatDateRange(req.start_date, req.end_date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[14px]">schedule</span> Time
+                        </span>
+                        <span className="text-sm font-bold text-slate-700">
+                          {formatTimeRange(req.start_time, req.end_time)}
+                        </span>
+                      </div>
+                      <div className="w-full h-px bg-slate-200"></div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[14px]">flight_takeoff</span> Type
+                        </span>
+                        <span className="text-sm font-bold text-slate-700">
+                          {getTypeCodeLabel(req.time_off_type_code)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {req.reason ? (
+                      <p className="text-sm text-slate-600 italic">"{req.reason}"</p>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No note provided.</p>
+                    )}
+                    
+                    <div className="flex gap-3 mt-auto pt-2">
+                      <button 
+                        onClick={() => handleDenyRequest(req.id)}
+                        className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors flex justify-center items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">close</span>
+                        Deny
+                      </button>
+                      <button 
+                        onClick={() => handleApproveRequest(req.id)}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow py-2 rounded-lg text-sm font-bold transition-all flex justify-center items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">check</span>
+                        Approve
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-on-surface">Elena Rodriguez</p>
-                    <p className="text-xs text-on-surface-variant font-medium">Licensed Voc. Nurse</p>
-                  </div>
-                </div>
-                <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>
-              </div>
-              
-              <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-100 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">calendar_month</span> Dates</span>
-                  <span className="text-sm font-bold text-slate-700">Dec 20 - Jan 02</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">schedule</span> Time</span>
-                  <span className="text-sm font-bold text-slate-700">Full Shift</span>
-                </div>
-                <div className="w-full h-px bg-slate-200"></div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">flight_takeoff</span> Type</span>
-                  <span className="text-sm font-bold text-slate-700">PTO / Holiday</span>
-                </div>
-              </div>
-              
-              <p className="text-sm text-slate-600 italic">"Holiday travel to see parents."</p>
-              
-              <div className="flex gap-3 mt-2">
-                <button className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors">Deny</button>
-                <button className="flex-1 bg-primary hover:bg-primary/90 text-white shadow-sm hover:shadow py-2 rounded-lg text-sm font-bold transition-all">Approve</button>
-              </div>
+                );
+              })}
             </div>
-
-          </div>
+          )}
         </div>
 
       </div>
