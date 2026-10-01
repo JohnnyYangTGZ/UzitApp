@@ -1908,6 +1908,7 @@ export default function Scheduler() {
                         const remaining = getShiftsRemainingCount(emp);
                         const expected = getExpectedWeeklyShiftsCount(emp);
                         const isPartiallyAssigned = expected > 0 && remaining > 0;
+                        const displayCount = remaining > 0 ? remaining : (needsAssignment ? 1 : 0);
 
                         return (
                           <div 
@@ -1942,21 +1943,18 @@ export default function Scheduler() {
                               {emp.users?.name?.charAt(0) || '?'}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center justify-between gap-2">
                                 <p className="font-bold text-slate-800 text-xs truncate group-hover:text-blue-900">
                                   {emp.users?.name}
                                 </p>
-                                {needsAssignment ? (
-                                  <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shrink-0 shadow-xs">
-                                    <span className="material-symbols-outlined text-[10px]">warning</span>
-                                    Assignment Needed
+                                {displayCount > 0 && (
+                                  <span 
+                                    className="bg-amber-500 text-white text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-xs flex items-center justify-center tracking-tight"
+                                    title={`${displayCount} shift(s) remaining to be assigned`}
+                                  >
+                                    +{displayCount}
                                   </span>
-                                ) : isPartiallyAssigned ? (
-                                  <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-0.5 shrink-0 shadow-xs">
-                                    <span className="material-symbols-outlined text-[10px]">schedule</span>
-                                    Shifts Remaining {remaining}
-                                  </span>
-                                ) : null}
+                                )}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="bg-blue-100 text-blue-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase">
