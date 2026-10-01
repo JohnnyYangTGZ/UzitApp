@@ -345,6 +345,22 @@ export default function StaffSchedule() {
                                 <span className="material-symbols-outlined text-base text-amber-600">hourglass_top</span>
                               </div>
                             );
+                          } else if (to.status === 'denied') {
+                            return (
+                              <div 
+                                key={`to-${idx}`} 
+                                className="mt-2 bg-rose-50 border border-rose-300 text-rose-900 p-2 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-between"
+                                title={to.manager_note ? `Denial Reason: ${to.manager_note}` : 'Request Denied'}
+                              >
+                                <div className="truncate pr-1">
+                                  <p className="font-bold truncate">{to.time_off_type_code || 'VAC'}</p>
+                                  <p className="text-[10px] text-rose-700 uppercase tracking-wider font-extrabold truncate">
+                                    Denied {to.manager_note ? `(${to.manager_note})` : ''}
+                                  </p>
+                                </div>
+                                <span className="material-symbols-outlined text-base text-rose-600 shrink-0">cancel</span>
+                              </div>
+                            );
                           } else {
                             return null;
                           }

@@ -51,6 +51,9 @@ export default function ManagerDashboard() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('All Staff');
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [denyModalRequest, setDenyModalRequest] = useState(null);
+  const [denyNote, setDenyNote] = useState('');
+  const [isSubmittingDenial, setIsSubmittingDenial] = useState(false);
 
   const fetchPendingRequests = async () => {
     if (!selectedClinicId) return;
@@ -122,23 +125,35 @@ export default function ManagerDashboard() {
     }
   };
 
-  const handleDenyRequest = async (requestId) => {
+  const handleOpenDenyModal = (req) => {
+    setDenyModalRequest(req);
+    setDenyNote('');
+  };
+
+  const confirmDenyRequest = async () => {
+    if (!denyModalRequest) return;
+    setIsSubmittingDenial(true);
     try {
       const { error } = await supabase
         .from('time_off_requests')
         .update({
           status: 'denied',
+          manager_note: denyNote.trim() || null,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user?.id
         })
-        .eq('id', requestId);
+        .eq('id', denyModalRequest.id);
 
       if (error) throw error;
 
+      setDenyModalRequest(null);
+      setDenyNote('');
       fetchPendingRequests();
     } catch (err) {
       console.error('Error denying time off request:', err);
       alert('Failed to deny request: ' + err.message);
+    } finally {
+      setIsSubmittingDenial(false);
     }
   };
   
@@ -647,7 +662,7 @@ export default function ManagerDashboard() {
                     
                     <div className="flex gap-3 mt-auto pt-2">
                       <button 
-                        onClick={() => handleDenyRequest(req.id)}
+                        onClick={() => handleOpenDenyModal(req)}
                         className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors flex justify-center items-center gap-1"
                       >
                         <span className="material-symbols-outlined text-[16px]">close</span>
@@ -669,6 +684,81 @@ export default function ManagerDashboard() {
         </div>
 
       </div>
+
+      {/* Deny Request Modal */}
+      {denyModalRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg">
+                  <span className="material-symbols-outlined text-[22px]">block</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-800">Deny Time Off Request</h3>
+                  <p className="text-xs text-slate-500">
+                    {denyModalRequest.users?.name} &bull; {formatDateRange(denyModalRequest.start_date, denyModalRequest.end_date)}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setDenyModalRequest(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs space-y-1">
+              <p className="text-slate-700 font-semibold flex justify-between">
+                <span>Type:</span>
+                <span className="text-slate-900 font-bold">{getTypeCodeLabel(denyModalRequest.time_off_type_code)}</span>
+              </p>
+              {denyModalRequest.reason && (
+                <p className="text-slate-500 italic pt-1 border-t border-slate-200/60 mt-1">"{denyModalRequest.reason}"</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Reason for Denial / Note for Employee <span className="font-normal text-slate-400">(Optional)</span>
+              </label>
+              <textarea
+                rows={3}
+                value={denyNote}
+                onChange={(e) => setDenyNote(e.target.value)}
+                placeholder="e.g. Coverage required for shift, staffing threshold reached..."
+                className="w-full text-sm border border-slate-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-all"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDenyModalRequest(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingDenial}
+                onClick={confirmDenyRequest}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                {isSubmittingDenial ? (
+                  <span>Denying...</span>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">close</span>
+                    Confirm Denial
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
