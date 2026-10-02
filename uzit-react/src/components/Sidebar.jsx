@@ -52,8 +52,7 @@ export default function Sidebar() {
 
   const staffItems = [
     { name: 'Dashboard', icon: 'dashboard', path: '/staff' },
-    { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
-    { name: 'Requests', icon: 'pending_actions', path: '/requests' },
+    { name: 'Calendar', icon: 'calendar_month', path: '/my-schedule' },
   ];
 
   const managerItems = [
@@ -70,12 +69,12 @@ export default function Sidebar() {
     { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
   ];
 
-  // Mobile navigation: Employees & Shifts removed. Focuses exclusively on Schedule!
+  // Mobile navigation: Employees & Shifts removed. Focuses exclusively on Schedule and Calendar!
   const mobileItems = isStaff
     ? staffItems
     : [
         { name: 'Schedule', icon: 'calendar_month', path: '/manager' },
-        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
+        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
       ];
 
   const desktopItems = isAdmin ? adminItems : isStaff ? staffItems : managerItems;

@@ -55,6 +55,7 @@ export default function ManagerDashboard() {
   const [denyModalRequest, setDenyModalRequest] = useState(null);
   const [denyNote, setDenyNote] = useState('');
   const [isSubmittingDenial, setIsSubmittingDenial] = useState(false);
+  const [dashboardData, setDashboardData] = useState({ weeklyCoverage: [], rosterByDay: {} });
 
   useEffect(() => {
     const handleClickOutside = () => setActiveDropdown(null);
@@ -112,7 +113,6 @@ export default function ManagerDashboard() {
   }, [selectedClinicId]);
 
   const updateTimeOffRequestStatus = async (requestId, updates) => {
-    // 1. Try standard update first
     const { error: updateErr } = await supabase
       .from('time_off_requests')
       .update(updates)
@@ -120,7 +120,6 @@ export default function ManagerDashboard() {
 
     if (!updateErr) return;
 
-    // 2. If standard update fails (e.g. broken net.http_post DB trigger), fallback to delete + re-insert
     const { data: existing, error: fetchErr } = await supabase
       .from('time_off_requests')
       .select('*')
@@ -155,15 +154,13 @@ export default function ManagerDashboard() {
     try {
       await updateTimeOffRequestStatus(requestId, {
         status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user?.id
+        reviewed_by: user?.id,
+        reviewed_at: new Date().toISOString()
       });
-
-      fetchPendingRequests();
-      setWeekOffset(w => w);
+      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (err) {
-      console.error('Error approving time off request:', err);
-      alert('Failed to approve request: ' + err.message);
+      console.error('Error approving request:', err);
+      alert('Failed to approve request: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -178,71 +175,54 @@ export default function ManagerDashboard() {
     try {
       await updateTimeOffRequestStatus(denyModalRequest.id, {
         status: 'denied',
-        manager_note: denyNote.trim() || null,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user?.id
+        manager_note: denyNote.trim() || 'Request denied by manager',
+        reviewed_by: user?.id,
+        reviewed_at: new Date().toISOString()
       });
-
+      setPendingRequests(prev => prev.filter(r => r.id !== denyModalRequest.id));
       setDenyModalRequest(null);
       setDenyNote('');
-      fetchPendingRequests();
     } catch (err) {
-      console.error('Error denying time off request:', err);
-      alert('Failed to deny request: ' + err.message);
+      console.error('Error denying request:', err);
+      alert('Failed to deny request: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmittingDenial(false);
     }
   };
-  
-  const [dashboardData, setDashboardData] = useState({
-    weeklyCoverage: [],
-    rosterByDay: {}
-  });
-
-  const ANCHOR_DATE = new Date(2025, 11, 14);
 
   useEffect(() => {
-    if (!selectedClinicId) return;
-
     async function fetchData() {
+      if (!selectedClinicId) return;
       setLoading(true);
 
-      // Determine the 7 days of the selected week
-      const today = new Date();
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + (weekOffset * 7));
-
-      const startOfWeek = new Date(targetDate);
-      startOfWeek.setDate(targetDate.getDate() - targetDate.getDay()); // Sunday
-
-      const weekDates = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(startOfWeek);
-        d.setDate(startOfWeek.getDate() + i);
-        
-        const utcDate = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
-        const utcAnchor = Date.UTC(ANCHOR_DATE.getFullYear(), ANCHOR_DATE.getMonth(), ANCHOR_DATE.getDate());
-        const diffDays = Math.round((utcDate - utcAnchor) / (1000 * 60 * 60 * 24));
-        const cycleIndex = ((diffDays % 14) + 14) % 14;
-        
-        weekDates.push({
+      const curr = new Date();
+      const first = curr.getDate() - curr.getDay() + (weekOffset * 7); 
+      const Sunday = new Date(curr.setDate(first));
+      
+      const weekDates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(Sunday);
+        d.setDate(Sunday.getDate() + i);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return {
           date: d,
-          cycleIndex,
-          dateStr: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        });
-      }
+          dateStr: `${y}-${m}-${day}`,
+          dayOfWeek: d.getDay(),
+          cycleIndex: i
+        };
+      });
 
       const minDateStr = weekDates[0].dateStr;
       const maxDateStr = weekDates[6].dateStr;
 
-      // 1. Fetch users for this clinic
       const { data: clinicUsers } = await supabase
         .from('employee_clinics')
         .select('user_id')
         .eq('clinic_id', selectedClinicId);
+      
       const userIds = (clinicUsers || []).map(cu => cu.user_id);
 
-      // 2. Fetch profiles & users
       let profiles = [];
       if (userIds.length > 0) {
         const { data: profs } = await supabase
@@ -251,14 +231,13 @@ export default function ManagerDashboard() {
             *,
             users:user_id ( id, name )
           `)
-          .in('user_id', userIds)
+          .in('user_id', userIds);
         profiles = (profs || []).filter(p => {
           const role = (p.staffing_role || p.job_title || '').toUpperCase();
           return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
         });
       }
 
-      // 3. Fetch Time Off for the whole week
       let timeOffs = [];
       if (userIds.length > 0) {
         const { data: offData } = await supabase
@@ -271,13 +250,11 @@ export default function ManagerDashboard() {
         timeOffs = offData || [];
       }
 
-      // 4. Fetch Requirements
       const { data: reqs } = await supabase
         .from('coverage_requirements')
         .select('*')
         .eq('location_id', selectedClinicId);
 
-      // Build data structures
       let weeklyCoverage = [];
       let rosterByDay = {};
 
@@ -286,7 +263,6 @@ export default function ManagerDashboard() {
         let actual = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
         let workingStaff = [];
         
-        // Calculate requirements for this day
         (reqs || []).forEach(req => {
           let pattern = req.schedule_pattern;
           if (typeof pattern === 'string') {
@@ -303,7 +279,6 @@ export default function ManagerDashboard() {
           }
         });
 
-        // Calculate actual assigned for this day
         profiles.forEach(prof => {
           let pattern = prof.schedule_pattern;
           if (typeof pattern === 'string') {
@@ -326,13 +301,13 @@ export default function ManagerDashboard() {
                 status: isOff ? 'Offsite' : 'Onsite'
               });
             
-            if (!isOff) {
-              actual[role] += 1;
-              actual.total += 1;
+              if (!isOff) {
+                actual[role] += 1;
+                actual.total += 1;
+              }
             }
           }
-        }
-      });
+        });
         
         const gap = required.RN > actual.RN || required.LVN > actual.LVN || required.MA > actual.MA;
         
@@ -344,7 +319,6 @@ export default function ManagerDashboard() {
           gap
         });
         
-        // Sort roster: Onsite first, then alphabetical
         workingStaff.sort((a, b) => {
           if (a.isOff !== b.isOff) return a.isOff ? 1 : -1;
           const nameA = a.users?.name || '';
@@ -379,12 +353,12 @@ export default function ManagerDashboard() {
 
   return (
     <Layout>
-      <div className="max-w-[1400px] mx-auto">
+      <div className="max-w-[1400px] mx-auto space-y-6">
         {/* Header Section */}
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 pb-2 border-b border-slate-100">
           <div>
-            <h1 className="font-h1 text-h1 text-primary mb-1">Weekly Staffing Overview</h1>
-            <p className="font-body-md text-on-surface-variant">
+            <h1 className="font-h1 text-2xl md:text-h1 text-primary mb-1">Weekly Staffing Overview</h1>
+            <p className="font-body-md text-sm md:text-base text-on-surface-variant">
               {dashboardData.weeklyCoverage.length > 0 ? (
                 <>Week of {dashboardData.weeklyCoverage[0].date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} • {clinicName}</>
               ) : (
@@ -392,7 +366,7 @@ export default function ManagerDashboard() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
             {/* Week Toggles */}
             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
               <button 
@@ -417,14 +391,231 @@ export default function ManagerDashboard() {
               </button>
             </div>
             
-            <button className="px-4 py-2 border border-secondary text-secondary rounded-lg font-label-sm hover:bg-secondary hover:text-white transition-colors">
+            <button className="hidden md:block px-4 py-2 border border-secondary text-secondary rounded-lg font-label-sm hover:bg-secondary hover:text-white transition-colors">
               Download Report
             </button>
           </div>
-        {/* Pending Time Off Requests (Top Priority for Quick Approval on Mobile) */}
-        <div className="mb-8">
+        </div>
+
+        {/* 1. Daily Health Stats (Clinic Health for Selected Day) */}
+        <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg sm:text-xl font-bold text-on-background flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+              <span className="material-symbols-outlined text-blue-600 text-xl">analytics</span>
+              Clinic Health for the Day
+            </h2>
+            {dashboardData.weeklyCoverage?.[selectedDayIndex]?.date && (
+              <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
+                {dashboardData.weeklyCoverage[selectedDayIndex].date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              </span>
+            )}
+          </div>
+
+          {/* Day Selector Pill Row */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3">
+            {dashboardData.weeklyCoverage.map((day, idx) => {
+              const isSelected = selectedDayIndex === idx;
+              const isToday = new Date().toDateString() === day.date.toDateString();
+              const dayName = day.date.toLocaleDateString('en-US', { weekday: 'short' });
+              
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedDayIndex(idx)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex flex-col items-center min-w-[62px] shrink-0 border cursor-pointer ${
+                    isSelected
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-400/30'
+                      : day.gap
+                      ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] uppercase tracking-wider">{dayName}</span>
+                    {day.gap && !isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                    )}
+                  </div>
+                  <span className="text-sm font-extrabold">{day.date.getDate()}</span>
+                  {isToday && (
+                    <span className={`text-[9px] ${isSelected ? 'text-blue-100' : 'text-blue-600'} font-black uppercase`}>Today</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected Day's Health Card */}
+          {loading ? (
+            <div className="h-44 bg-white rounded-xl border border-surface-border shadow-xs flex items-center justify-center">
+              <span className="text-slate-400 text-sm">Loading daily health stats...</span>
+            </div>
+          ) : (
+            (() => {
+              const day = dashboardData.weeklyCoverage[selectedDayIndex];
+              if (!day) return null;
+              const isToday = new Date().toDateString() === day.date.toDateString();
+
+              return (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-5 shadow-xs transition-all">
+                  <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm md:text-base font-bold text-slate-900">
+                          {day.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        {isToday && (
+                          <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Today
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        Target staffing vs actual working count
+                      </p>
+                    </div>
+
+                    {day.gap ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200 shrink-0">
+                        <span className="material-symbols-outlined text-[16px] text-rose-600">warning</span>
+                        Shortage
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
+                        <span className="material-symbols-outlined text-[16px] text-emerald-600">check_circle</span>
+                        Fully Staffed
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Staffing Roles Breakdown Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    {['RN', 'LVN', 'MA'].map(role => {
+                      const actualCount = day.actual[role] || 0;
+                      const requiredCount = day.required[role] || 0;
+                      const isDeficit = actualCount < requiredCount;
+                      const isOpen = activeDropdown?.dayIdx === selectedDayIndex && activeDropdown?.role === role;
+
+                      const roleStaff = (dashboardData.rosterByDay[selectedDayIndex] || []).filter(st => {
+                        if (st.isOff) return false;
+                        const r = (st.staffing_role || '').toUpperCase().trim();
+                        if (role === 'RN') return r === 'RN' || r === 'REGISTERED NURSE';
+                        if (role === 'LVN') return r === 'LVN' || r === 'LICENSED VOCATIONAL NURSE';
+                        if (role === 'MA') return r === 'MA' || r === 'MEDICAL ASSISTANT';
+                        return r === role;
+                      });
+
+                      return (
+                        <div 
+                          key={role} 
+                          className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all ${
+                            isDeficit ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{role}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDropdown(isOpen ? null : { dayIdx: selectedDayIndex, role });
+                              }}
+                              className={`px-2 py-0.5 rounded text-xs font-bold transition-all flex items-center gap-0.5 cursor-pointer ${
+                                isOpen ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-400' : 'bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-700'
+                              } ${isDeficit ? 'text-rose-700' : 'text-emerald-700'}`}
+                            >
+                              <span>{actualCount}</span>
+                              <span className="text-[11px] font-normal text-slate-400">/ {requiredCount}</span>
+                              <span className="material-symbols-outlined text-[14px] text-slate-400">arrow_drop_down</span>
+                            </button>
+                          </div>
+
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div 
+                              className={`h-full ${isDeficit ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                              style={{ width: `${requiredCount ? Math.min(100, (actualCount / requiredCount) * 100) : 100}%` }}
+                            ></div>
+                          </div>
+
+                          {/* Who's Working Dropdown Popover */}
+                          {isOpen && (
+                            <div 
+                              className="absolute right-0 top-10 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-3.5 space-y-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                <div>
+                                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-sm text-blue-600">group</span>
+                                    Who's Working Today
+                                  </h4>
+                                  <p className="text-[10px] text-slate-500 font-medium">
+                                    {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {role} ({roleStaff.length})
+                                  </p>
+                                </div>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveDropdown(null);
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">close</span>
+                                </button>
+                              </div>
+
+                              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                                {roleStaff.length > 0 ? (
+                                  roleStaff.map((st, i) => (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                                          {st.users?.name?.charAt(0) || '?'}
+                                        </div>
+                                        <div className="truncate">
+                                          <p className="font-bold text-slate-800 truncate">{st.users?.name || 'Staff'}</p>
+                                          <p className="text-[10px] text-slate-500 truncate">{st.effectiveShiftTime || 'Scheduled'}</p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                        {role}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="p-3 text-center text-slate-400 text-xs italic">
+                                    No {role} staff scheduled for this date.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Progress Bar for Total Staffing */}
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-semibold mb-1">
+                    <span>Overall Staffing Coverage</span>
+                    <span>{day.actual.total} / {day.required.total} Total Onsite</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${day.gap ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                      style={{ width: `${day.required.total ? Math.min(100, (day.actual.total / day.required.total) * 100) : 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </div>
+
+        {/* 2. Pending Time Off Requests - Directly below Daily Health Stats */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
               <span className="material-symbols-outlined text-amber-500 text-xl">pending_actions</span>
               Pending Time Off Requests
             </h2>
@@ -441,7 +632,7 @@ export default function ManagerDashboard() {
               Loading pending requests...
             </div>
           ) : pendingRequests.length === 0 ? (
-            <div className="bg-white rounded-xl border border-surface-border p-6 text-center text-slate-500 shadow-xs flex items-center justify-center gap-3">
+            <div className="bg-white rounded-xl border border-surface-border p-5 text-center text-slate-500 shadow-xs flex items-center justify-center gap-3">
               <span className="material-symbols-outlined text-2xl text-emerald-500">check_circle</span>
               <div className="text-left">
                 <p className="font-bold text-slate-800 text-xs sm:text-sm">No pending time off requests</p>
@@ -449,7 +640,7 @@ export default function ManagerDashboard() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {pendingRequests.map(req => {
                 const rawProfile = req.users?.employee_profiles;
                 const empProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
@@ -509,14 +700,14 @@ export default function ManagerDashboard() {
                     <div className="flex gap-2.5 mt-auto pt-1">
                       <button 
                         onClick={() => handleOpenDenyModal(req)}
-                        className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-1.5 rounded-lg text-xs font-bold transition-colors flex justify-center items-center gap-1"
+                        className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-1.5 rounded-lg text-xs font-bold transition-colors flex justify-center items-center gap-1 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-[14px]">close</span>
                         Deny
                       </button>
                       <button 
                         onClick={() => handleApproveRequest(req.id)}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs py-1.5 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-1"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs py-1.5 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-1 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-[14px]">check</span>
                         Approve
@@ -529,271 +720,162 @@ export default function ManagerDashboard() {
           )}
         </div>
 
-        {/* 7-Day Matrix */}
-        {loading ? (
-          <div className="h-48 bg-white rounded-xl border border-surface-border shadow-sm flex items-center justify-center mb-8">
-            <span className="text-slate-400">Loading weekly schedule...</span>
+        {/* 3. Daily Staff Roster Section */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                <span className="material-symbols-outlined text-slate-700 text-xl">badge</span>
+                Staff Roster
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                {selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Loading...'}
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4 mb-10">
-            {dashboardData.weeklyCoverage.map((day, idx) => {
-              const isSelected = selectedDayIndex === idx;
-              const isToday = new Date().toDateString() === day.date.toDateString();
-              
-              return (
-                <div 
-                  key={idx} 
-                  onClick={() => setSelectedDayIndex(idx)}
-                  className={`bg-white rounded-xl border p-4 cursor-pointer transition-all duration-200 ${
-                    isSelected ? 'border-primary ring-2 ring-primary shadow-md transform scale-[1.02]' : 
-                    day.gap ? 'border-error/30 hover:border-error/50 hover:shadow-sm' : 'border-surface-border hover:border-primary/30 hover:shadow-sm'
-                  }`}
+
+          <div className="bg-white rounded-xl border border-surface-border shadow-xs overflow-hidden">
+            <div className="p-3 bg-surface-container-low border-b border-surface-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                <button 
+                  onClick={() => setSelectedRoleFilter('All Staff')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition-colors ${selectedRoleFilter === 'All Staff' ? 'bg-white border border-surface-border text-primary shadow-xs' : 'text-slate-600 hover:bg-white/50'}`}
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-primary' : 'text-on-surface-variant'}`}>
-                        {day.date.toLocaleDateString('en-US', { weekday: 'short' })} {isToday && '(Today)'}
+                  All Staff
+                </button>
+                {allRolesInWeek.map(role => (
+                  <button 
+                    key={role}
+                    onClick={() => setSelectedRoleFilter(role)}
+                    className={`px-3 py-1 rounded text-xs font-bold transition-colors ${selectedRoleFilter === role ? 'bg-white border border-surface-border text-primary shadow-xs' : 'text-slate-600 hover:bg-white/50'}`}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 text-slate-500 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-onsite"></span>
+                  <span>Scheduled</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-off"></span>
+                  <span>Off / Leave</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <div className="grid grid-cols-[220px_1.5fr_1fr_140px_120px_140px] bg-slate-50 border-b border-surface-border text-[11px] text-slate-500 font-bold uppercase tracking-wider px-6 py-3">
+                <div>Employee Name</div>
+                <div>Clinic</div>
+                <div>Role</div>
+                <div>Shift Window</div>
+                <div>Status</div>
+                <div className="text-right">Schedule</div>
+              </div>
+
+              <div className="divide-y divide-surface-border min-h-[160px]">
+                {loading ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">Loading roster...</div>
+                ) : filteredRoster.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">No staff scheduled for this day.</div>
+                ) : (
+                  filteredRoster.map(staff => (
+                    <div key={staff.user_id} className={`grid grid-cols-[220px_1.5fr_1fr_140px_120px_140px] px-6 py-3 items-center hover:bg-slate-50 transition-colors text-xs ${staff.isOff ? 'bg-slate-50/50' : ''}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${staff.isOff ? 'bg-slate-200 text-slate-500' : 'bg-blue-100 text-blue-700'}`}>
+                          {staff.users?.name?.charAt(0) || 'U'}
+                        </div>
+                        <div className="truncate">
+                          <p className={`font-bold truncate ${staff.isOff ? 'text-slate-400' : 'text-slate-900'}`}>{staff.users?.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">ID: {staff.employee_code || 'N/A'}</p>
+                        </div>
                       </div>
-                      <div className={`text-2xl font-bold mt-0.5 ${isToday ? 'text-primary' : 'text-on-background'}`}>
-                        {day.date.getDate()}
+                      <div className="font-medium text-slate-700 truncate pr-2">
+                        {clinicName}
+                      </div>
+                      <div className="font-semibold text-slate-800">
+                        {{
+                          'RN': 'Registered Nurse',
+                          'MA': 'Medical Assistant',
+                          'LVN': 'Licensed Vocational Nurse'
+                        }[staff.staffing_role] || staff.staffing_role || staff.job_title}
+                      </div>
+                      <div className="font-medium text-slate-600">{staff.effectiveShiftTime || '08:00 – 16:00'}</div>
+                      <div>
+                        {staff.isOff ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                            Offsite
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                            Scheduled
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-end gap-1">
+                        {staff.isOff ? (
+                          <div className="w-12 h-5 border border-dashed border-slate-300 rounded flex items-center justify-center text-[9px] text-slate-400 font-bold uppercase">OFF</div>
+                        ) : (
+                          <div className="w-12 h-5 bg-blue-600 rounded flex items-center justify-center text-[9px] text-white font-bold">WORK</div>
+                        )}
                       </div>
                     </div>
-                    {day.gap && (
-                      <span className="material-symbols-outlined text-error text-[20px]" title="Coverage Shortage">warning</span>
-                    )}
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100">
+              {loading ? (
+                <div className="p-6 text-center text-slate-400 text-xs">Loading roster...</div>
+              ) : filteredRoster.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs">No staff scheduled for this day.</div>
+              ) : (
+                filteredRoster.map(staff => (
+                  <div key={staff.user_id} className="p-3.5 flex items-center justify-between text-xs gap-3">
+                    <div className="flex items-center gap-3 truncate">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${staff.isOff ? 'bg-slate-100 text-slate-400' : 'bg-blue-100 text-blue-700'}`}>
+                        {staff.users?.name?.charAt(0) || 'U'}
+                      </div>
+                      <div className="truncate">
+                        <p className="font-bold text-slate-900 text-sm truncate">{staff.users?.name}</p>
+                        <p className="text-[11px] text-slate-500 font-medium truncate">
+                          {staff.staffing_role || staff.job_title} &bull; {staff.effectiveShiftTime || '08:00 – 16:00'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-extrabold uppercase shrink-0 ${
+                      staff.isOff 
+                        ? 'bg-slate-100 text-slate-500 border border-slate-200' 
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}>
+                      {staff.isOff ? 'Off' : 'Working'}
+                    </span>
                   </div>
+                ))
+              )}
+            </div>
 
-                  <div className="space-y-2.5">
-                    {['RN', 'LVN', 'MA'].map(role => {
-                      const actualCount = day.actual[role] || 0;
-                      const requiredCount = day.required[role] || 0;
-                      const isDeficit = actualCount < requiredCount;
-                      const isOpen = activeDropdown?.dayIdx === idx && activeDropdown?.role === role;
-
-                      const roleStaff = (dashboardData.rosterByDay[idx] || []).filter(st => {
-                        if (st.isOff) return false;
-                        const r = (st.staffing_role || '').toUpperCase().trim();
-                        if (role === 'RN') return r === 'RN' || r === 'REGISTERED NURSE';
-                        if (role === 'LVN') return r === 'LVN' || r === 'LICENSED VOCATIONAL NURSE';
-                        if (role === 'MA') return r === 'MA' || r === 'MEDICAL ASSISTANT';
-                        return r === role;
-                      });
-
-                      return (
-                        <div key={role} className="relative flex justify-between items-center text-sm py-0.5">
-                          <span className="text-on-surface-variant font-medium">{role}</span>
-                          
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveDropdown(isOpen ? null : { dayIdx: idx, role });
-                            }}
-                            className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-0.5 cursor-pointer font-bold ${
-                              isOpen ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-400' : 'hover:bg-blue-50/70 hover:text-blue-700'
-                            } ${isDeficit ? 'text-error' : 'text-status-approved'}`}
-                            title={`Click for quick view of ${role} staff working on ${day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-                          >
-                            <span>{actualCount}</span>
-                            <span className="text-xs font-normal text-slate-400">/ {requiredCount}</span>
-                            <span className="material-symbols-outlined text-[14px] text-slate-400">arrow_drop_down</span>
-                          </button>
-
-                          {/* Who's Working Dropdown Popover */}
-                          {isOpen && (
-                            <div 
-                              className="absolute right-0 top-7 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-100 text-left cursor-default"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                <div>
-                                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                                    <span className="material-symbols-outlined text-sm text-blue-600">group</span>
-                                    Who's Working Today
-                                  </h4>
-                                  <p className="text-[10px] text-slate-500 font-medium">
-                                    {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {role} ({roleStaff.length})
-                                  </p>
-                                </div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveDropdown(null);
-                                  }}
-                                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
-                                  title="Close"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">close</span>
-                                </button>
-                              </div>
-
-                              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
-                                {roleStaff.length > 0 ? (
-                                  roleStaff.map((st, i) => (
-                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs hover:bg-blue-50/50 transition-colors">
-                                      <div className="flex items-center gap-2 truncate">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                                          {st.users?.name?.charAt(0) || '?'}
-                                        </div>
-                                        <div className="truncate">
-                                          <p className="font-bold text-slate-800 truncate">{st.users?.name || 'Staff'}</p>
-                                          <p className="text-[10px] text-slate-500 truncate">{st.effectiveShiftTime || 'Scheduled'}</p>
-                                        </div>
-                                      </div>
-                                      <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                        {role}
-                                      </span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="p-3 text-center text-slate-400 text-xs italic">
-                                    No {role} staff scheduled for this date.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Progress bar indicator */}
-                  <div className="w-full bg-slate-100 h-1 rounded-full mt-4 overflow-hidden">
-                    <div 
-                      className={`h-full ${day.gap ? 'bg-error' : 'bg-status-approved'}`} 
-                      style={{ width: `${day.required.total ? Math.min(100, (day.actual.total / day.required.total) * 100) : 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
+            <div className="p-3 bg-slate-50 border-t border-surface-border flex justify-between items-center text-xs text-slate-500">
+              <span>Showing {filteredRoster.length} staff members</span>
+            </div>
           </div>
-        )}
-
-        {/* Daily Roster Header */}
-        <div className="flex items-center justify-between mb-4">
-           <div>
-             <h2 className="text-h2 font-h2 text-on-background">
-               Staff Roster
-             </h2>
-             <p className="text-body-md text-on-surface-variant">
-               {selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Loading...'}
-             </p>
-           </div>
         </div>
 
-        {/* High-Density Operational Board */}
-        <div className="bg-white rounded-xl border border-surface-border shadow-sm overflow-hidden mb-12">
-          <div className="p-4 bg-surface-container-low border-b border-surface-border flex justify-between items-center">
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setSelectedRoleFilter('All Staff')}
-                className={`px-3 py-1 rounded font-label-sm transition-colors ${selectedRoleFilter === 'All Staff' ? 'bg-white border border-surface-border text-primary shadow-sm' : 'text-on-surface-variant hover:bg-white/50'}`}
-              >
-                All Staff
-              </button>
-              {allRolesInWeek.map(role => (
-                <button 
-                  key={role}
-                  onClick={() => setSelectedRoleFilter(role)}
-                  className={`px-3 py-1 rounded font-label-sm transition-colors ${selectedRoleFilter === role ? 'bg-white border border-surface-border text-primary shadow-sm' : 'text-on-surface-variant hover:bg-white/50'}`}
-                >
-                  {role}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-4 text-on-surface-variant">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-status-onsite"></span>
-                <span className="text-label-sm">Scheduled</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-status-off"></span>
-                <span className="text-label-sm">Off / Leave</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Grid Header */}
-          <div className="grid grid-cols-[240px_1.5fr_1fr_140px_140px_180px] bg-slate-50 border-b border-surface-border text-label-sm text-on-surface-variant font-bold uppercase tracking-wider px-6 py-3">
-            <div>Employee Name</div>
-            <div>Clinic</div>
-            <div>Role</div>
-            <div>Shift Window</div>
-            <div>Status</div>
-            <div className="text-right">Schedule</div>
-          </div>
-
-          {/* Grid Rows */}
-          <div className="divide-y divide-surface-border min-h-[200px]">
-            {loading ? (
-              <div className="p-12 text-center text-slate-500">Loading roster...</div>
-            ) : filteredRoster.length === 0 ? (
-              <div className="p-12 text-center text-slate-500">No staff scheduled for this day.</div>
-            ) : (
-              filteredRoster.map(staff => (
-                <div key={staff.user_id} className={`grid grid-cols-[240px_1.5fr_1fr_140px_140px_180px] px-6 py-3 items-center hover:bg-slate-50 transition-colors ${staff.isOff ? 'bg-slate-50/50' : ''}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs overflow-hidden ${staff.isOff ? 'bg-slate-200 text-slate-500' : 'bg-primary-fixed text-primary'}`}>
-                      {staff.users?.name?.charAt(0) || 'U'}
-                    </div>
-                    <div>
-                      <p className={`font-data-tabular ${staff.isOff ? 'text-slate-400' : 'text-on-background'}`}>{staff.users?.name}</p>
-                      <p className="text-[11px] text-on-surface-variant">ID: {staff.employee_code || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <div className={`text-body-md font-medium text-on-surface-variant truncate pr-4 ${staff.isOff ? 'opacity-60' : ''}`}>
-                    {clinicName}
-                  </div>
-                  <div className={`text-body-md font-medium text-on-surface-variant ${staff.isOff ? 'opacity-60' : ''}`}>
-                    {{
-                      'RN': 'Registered Nurse',
-                      'MA': 'Medical Assistant',
-                      'LVN': 'Licensed Vocational Nurse'
-                    }[staff.staffing_role] || staff.staffing_role || staff.job_title}
-                  </div>
-                  <div className={`text-data-tabular ${staff.isOff ? 'text-slate-400' : ''}`}>{staff.effectiveShiftTime || '08:00 – 16:00 (AM)'}</div>
-                  <div>
-                    {staff.isOff ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-status-off text-label-sm border border-slate-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-off"></span>
-                        Offsite
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 text-status-onsite text-label-sm border border-green-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-onsite"></span>
-                        Scheduled
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex justify-end gap-1">
-                    {staff.isOff ? (
-                      <div className="w-12 h-6 border border-dashed border-slate-300 rounded-sm flex items-center justify-center text-[9px] text-slate-400 font-bold uppercase">OFF</div>
-                    ) : (
-                      <>
-                        <div className="w-12 h-6 bg-primary rounded-sm flex items-center justify-center text-[9px] text-white font-bold">WORK</div>
-                        <div className="w-12 h-6 bg-slate-100 rounded-sm flex items-center justify-center text-[9px] text-slate-400 font-bold">OFF</div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="p-4 bg-slate-50 border-t border-surface-border flex justify-between items-center">
-            <span className="text-body-md text-on-surface-variant">Showing {filteredRoster.length} staff members</span>
-            <div className="flex gap-2">
-              <button className="p-1 rounded hover:bg-white text-on-surface-variant disabled:opacity-50" disabled>
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <button className="px-2 py-1 bg-white border border-surface-border rounded text-body-md font-medium">1</button>
-              <button className="p-1 rounded hover:bg-white text-on-surface-variant disabled:opacity-50" disabled>
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
-          </div>
+        {/* 4. Bottom Schedule Button */}
+        <div className="pt-2 pb-4">
+          <button 
+            onClick={() => navigate('/manager/calendar')} 
+            className="w-full py-3.5 px-6 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-xl flex items-center justify-center gap-2.5 shadow-md transition-all text-sm sm:text-base cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-xl sm:text-2xl">calendar_month</span>
+            Go to Full Manager Calendar
+          </button>
         </div>
 
       </div>
@@ -872,17 +954,6 @@ export default function ManagerDashboard() {
           </div>
         </div>
       )}
-        {/* Bottom Schedule Button */}
-        <div className="pt-4 pb-6">
-          <button 
-            onClick={() => navigate('/scheduler')} 
-            className="w-full py-3.5 px-6 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-xl flex items-center justify-center gap-2.5 shadow-md transition-all text-sm sm:text-base cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-xl sm:text-2xl">calendar_month</span>
-            Go to Full Schedule Page
-          </button>
-        </div>
-      </div>
     </Layout>
   );
 }

@@ -256,334 +256,195 @@ export default function StaffSchedule() {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-4">
           <div>
-            <h1 className="font-h1 text-h1 text-primary mb-1">My Schedule</h1>
-            <p className="font-body-md text-body-md text-on-surface-variant">Manage your shifts and time-off requests for {monthName}.</p>
+            <h1 className="font-h1 text-2xl md:text-h1 text-primary mb-1">My Schedule Calendar</h1>
+            <p className="font-body-md text-sm md:text-base text-on-surface-variant">View your shifts and time-off requests for {monthName}.</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-secondary text-on-primary font-bold px-5 py-2.5 rounded-lg hover:bg-secondary/90 transition-colors flex items-center gap-2 shadow-sm"
+              onClick={() => {
+                setSelectedDateForModal(new Date().toISOString().split('T')[0]);
+                setIsModalOpen(true);
+              }}
+              className="bg-secondary text-on-primary font-bold px-4 py-2 rounded-lg hover:bg-secondary/90 transition-colors flex items-center gap-2 shadow-sm text-xs md:text-sm cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[20px]">add</span>
+              <span className="material-symbols-outlined text-[18px]">add</span>
               Request Time Off
             </button>
             <div className="flex items-center bg-white border border-surface-border rounded-lg p-1 shadow-sm">
-              <button onClick={prevMonth} className="p-2 hover:bg-surface-container rounded-lg transition-colors">
-                <span className="material-symbols-outlined">chevron_left</span>
+              <button onClick={prevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-600" title="Previous Month">
+                <span className="material-symbols-outlined text-lg">chevron_left</span>
               </button>
-              <span className="px-4 font-h3 text-h3">{monthName}</span>
-              <button onClick={nextMonth} className="p-2 hover:bg-surface-container rounded-lg transition-colors">
-                <span className="material-symbols-outlined">chevron_right</span>
+              <span className="px-3 font-bold text-xs md:text-sm text-slate-800">{monthName}</span>
+              <button onClick={nextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-600" title="Next Month">
+                <span className="material-symbols-outlined text-lg">chevron_right</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Dashboard Summary Bento */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
-            <div className="bg-secondary-container text-on-secondary-container p-3 rounded-lg">
-              <span className="material-symbols-outlined">work</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white border border-surface-border p-4 rounded-xl flex items-center gap-3 shadow-2xs">
+            <div className="bg-secondary-container text-on-secondary-container p-2.5 rounded-lg shrink-0">
+              <span className="material-symbols-outlined text-xl">work</span>
             </div>
             <div>
-              <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">Total Shifts</p>
-              <p className="font-h2 text-h2">{shifts.length}</p>
+              <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Total Shifts</p>
+              <p className="font-bold text-lg md:text-xl text-slate-900">{shifts.length}</p>
             </div>
           </div>
-          <div className="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
-            <div className="bg-green-100 text-status-approved p-3 rounded-lg">
-              <span className="material-symbols-outlined">event_available</span>
+          <div className="bg-white border border-surface-border p-4 rounded-xl flex items-center gap-3 shadow-2xs">
+            <div className="bg-emerald-100 text-emerald-800 p-2.5 rounded-lg shrink-0">
+              <span className="material-symbols-outlined text-xl">event_available</span>
             </div>
             <div>
-              <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">Approved PTO</p>
-              <p className="font-h2 text-h2">{totalApprovedDays} Days</p>
+              <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Approved PTO</p>
+              <p className="font-bold text-lg md:text-xl text-slate-900">{totalApprovedDays} Days</p>
             </div>
           </div>
-          <div className="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
-            <div className="bg-amber-100 text-status-pending p-3 rounded-lg">
-              <span className="material-symbols-outlined">hourglass_empty</span>
+          <div className="bg-white border border-surface-border p-4 rounded-xl flex items-center gap-3 shadow-2xs">
+            <div className="bg-amber-100 text-amber-800 p-2.5 rounded-lg shrink-0">
+              <span className="material-symbols-outlined text-xl">hourglass_empty</span>
             </div>
             <div>
-              <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">Pending Requests</p>
-              <p className="font-h2 text-h2">{pendingCount}</p>
+              <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Requests</p>
+              <p className="font-bold text-lg md:text-xl text-slate-900">{pendingCount}</p>
             </div>
           </div>
-          <div className="bg-white border border-surface-border p-6 rounded-xl flex items-start gap-4">
-            <div className="bg-primary text-on-primary p-3 rounded-lg">
-              <span className="material-symbols-outlined">query_builder</span>
+          <div className="bg-white border border-surface-border p-4 rounded-xl flex items-center gap-3 shadow-2xs">
+            <div className="bg-primary text-on-primary p-2.5 rounded-lg shrink-0">
+              <span className="material-symbols-outlined text-xl">query_builder</span>
             </div>
             <div>
-              <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">Total Hours</p>
-              <p className="font-h2 text-h2">{shifts.length * 8}h</p>
+              <p className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Total Hours</p>
+              <p className="font-bold text-lg md:text-xl text-slate-900">{shifts.length * 8}h</p>
             </div>
           </div>
         </div>
 
-        {/* Calendar & Floating Details Section */}
-        <div className="relative bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden w-full">
-          {/* Mobile Agenda List (< md) */}
-          <div className="block md:hidden p-3 space-y-3 bg-slate-50/50">
-            <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-              <span className="font-bold text-sm text-slate-900">{monthName}</span>
-              <button
-                onClick={() => {
-                  setSelectedDateForModal(new Date().toISOString().split('T')[0]);
-                  setIsModalOpen(true);
-                }}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-xs"
-              >
-                <span className="material-symbols-outlined text-[15px]">add</span>
-                Request Time Off
-              </button>
+        {/* 7-Column Monthly Schedule Calendar (Responsive Overflow on Mobile) */}
+        <div className="relative bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden w-full mb-8">
+          <div className="overflow-x-auto">
+            {/* Days of Week Header */}
+            <div className="grid grid-cols-7 min-w-[700px] md:min-w-0 border-b border-surface-border bg-slate-50">
+              {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+                <div key={day} className="py-3 text-center text-[11px] md:text-xs font-bold text-slate-700 uppercase tracking-wider border-r border-surface-border last:border-r-0">
+                  {day}
+                </div>
+              ))}
             </div>
 
+            {/* Calendar Cells */}
             {loading ? (
-              <div className="p-8 text-center text-slate-500 text-xs">Loading schedule...</div>
+              <div className="p-12 text-center text-slate-500 text-xs">Loading your schedule calendar...</div>
             ) : (
-              calendarDays
-                .filter(day => day.isCurrentMonth)
-                .map((day) => {
+              <div className="grid grid-cols-7 auto-rows-auto min-w-[700px] md:min-w-0 relative">
+                {calendarDays.map((day, i) => {
+                  const isSelected = activeDayDetails?.dateStr === day.dateStr;
                   const isToday = new Date().toDateString() === day.date.toDateString();
-                  const hasApprovedPTO = day.timeOffs.some(to => to.status === 'approved');
 
                   return (
                     <div 
-                      key={day.dateStr}
-                      className={`bg-white border rounded-xl p-3.5 shadow-2xs space-y-2 transition-all ${
-                        isToday ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'
-                      }`}
+                      key={day.dateStr} 
+                      className={`min-h-[120px] p-2.5 border-b border-surface-border relative transition-colors ${i % 7 !== 6 ? 'border-r border-surface-border' : ''} ${!day.isCurrentMonth ? 'bg-slate-50/50 opacity-50' : 'hover:bg-slate-50 cursor-pointer'} ${isSelected ? 'bg-blue-50/50 ring-2 ring-blue-500 ring-inset z-1' : ''}`}
+                      onClick={() => day.isCurrentMonth && setActiveDateMenu(activeDateMenu === day.dateStr ? null : day.dateStr)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-bold ${isToday ? 'text-blue-700' : 'text-slate-900'}`}>
-                            {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      <div className="flex justify-between items-center mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                            isToday ? 'bg-blue-600 text-white' : isSelected ? 'text-blue-700 font-bold' : 'text-slate-800'
+                          }`}>
+                            {day.date.getDate()}
                           </span>
                           {isToday && (
-                            <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Today</span>
+                            <span className="text-[9px] font-extrabold text-blue-600 uppercase">Today</span>
                           )}
                         </div>
-                        <button
-                          onClick={() => {
-                            setSelectedDateForModal(day.dateStr);
-                            setIsModalOpen(true);
-                          }}
-                          className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">event_busy</span>
-                          Request Off
-                        </button>
                       </div>
-
-                      {/* Shifts */}
-                      {!hasApprovedPTO && day.shifts.map((assignment, sIdx) => {
-                        const published = isShiftPublished(assignment);
-                        return (
-                          <div 
-                            key={`m-shift-${sIdx}`}
-                            onClick={() => setSelectedDayDetails(day)}
-                            className={`p-2.5 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer border ${
-                              published 
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
-                                : 'bg-slate-50 border-slate-200 text-slate-900'
-                            }`}
+                      
+                      {/* Interactive Date Menu Popover */}
+                      {activeDateMenu === day.dateStr && (
+                        <div className="absolute top-8 left-2 right-2 bg-white rounded-lg shadow-xl border border-slate-200 z-30 overflow-hidden flex flex-col animate-fade-in">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDayDetails(day);
+                              setActiveDateMenu(null);
+                            }}
+                            className="text-left px-3 py-2 text-xs text-slate-800 font-bold hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2"
                           >
-                            <div className="flex items-center gap-2">
-                              <span className={`material-symbols-outlined text-base ${published ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                event_available
-                              </span>
-                              <div>
-                                <p className="font-bold">{assignment.shifts?.location?.name || 'Clinic Shift'}</p>
-                                <p className="text-[11px] text-slate-500 font-medium">
-                                  {assignment.shifts?.start_time && assignment.shifts?.end_time
-                                    ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
-                                    : `${assignment.shifts?.time_block || 'Regular'} Shift`}
-                                </p>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ${
-                              published ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                            }`}>
-                              {published ? 'Published' : 'Draft'}
-                            </span>
-                          </div>
-                        );
-                      })}
-
-                      {/* Time Off Requests */}
-                      {day.timeOffs.map((to, tIdx) => {
-                        const isApproved = to.status === 'approved';
-                        const isPending = to.status === 'pending';
-                        return (
-                          <div 
-                            key={`m-to-${tIdx}`}
-                            onClick={() => setSelectedDayDetails(day)}
-                            className={`p-2.5 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer border ${
-                              isApproved 
-                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
-                                : isPending
-                                ? 'bg-amber-50 border-amber-200 text-amber-900'
-                                : 'bg-rose-50 border-rose-200 text-rose-900'
-                            }`}
+                            <span className="material-symbols-outlined text-[15px] text-blue-600">info</span>
+                            View Shift & Day Details
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDateForModal(day.dateStr);
+                              setIsModalOpen(true);
+                              setActiveDateMenu(null);
+                            }}
+                            className="text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2 font-medium"
                           >
-                            <div className="flex items-center gap-2">
-                              <span className={`material-symbols-outlined text-base ${
-                                isApproved ? 'text-emerald-600' : isPending ? 'text-amber-600' : 'text-rose-600'
-                              }`}>
-                                {isApproved ? 'check_circle' : isPending ? 'hourglass_top' : 'block'}
-                              </span>
-                              <div>
-                                <p className="font-bold">{to.time_off_type_code || 'VAC'} Time Off</p>
-                                <p className="text-[11px] opacity-80 font-medium">
-                                  {to.start_time && to.end_time ? `${formatTime(to.start_time)} - ${formatTime(to.end_time)}` : 'Full Day'}
-                                </p>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ${
-                              isApproved ? 'bg-emerald-100 text-emerald-800' : isPending ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                            }`}>
-                              {to.status}
-                            </span>
-                          </div>
-                        );
-                      })}
-
-                      {day.shifts.length === 0 && day.timeOffs.length === 0 && (
-                        <p className="text-[11px] text-slate-400 italic">No shifts or time off scheduled</p>
+                            <span className="material-symbols-outlined text-[15px]">event_busy</span>
+                            Request Time Off
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDateForModal(day.dateStr);
+                              setIsAvailabilityModalOpen(true);
+                              setActiveDateMenu(null);
+                            }}
+                            className="text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-emerald-600 transition-colors flex items-center gap-2 font-medium"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">event_available</span>
+                            Provide Availability
+                          </button>
+                        </div>
                       )}
-                    </div>
-                  );
-                })
-            )}
-          </div>
 
-          {/* Desktop Monthly Grid View (>= md) */}
-          <div className="hidden md:block">
-            <div className="grid grid-cols-7 border-b border-surface-border bg-surface-container-lowest">
-            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
-              <div key={day} className={`py-4 text-center font-label-sm text-on-surface-variant ${day !== 'SAT' ? 'border-r border-surface-border' : ''}`}>{day}</div>
-            ))}
-          </div>
+                      {/* Day Shifts & Time Off Badges */}
+                      {(() => {
+                        const hasApprovedPTO = day.timeOffs.some(to => to.status === 'approved');
 
-          {loading ? (
-            <div className="p-12 text-center text-slate-500">Loading schedule...</div>
-          ) : (
-            <div className="grid grid-cols-7 relative">
-              {calendarDays.map((day, i) => {
-                const isSelected = activeDayDetails?.dateStr === day.dateStr;
-                return (
-                  <div 
-                    key={day.dateStr} 
-                    className={`min-h-[120px] p-3 border-b border-surface-border relative transition-colors ${i % 7 !== 6 ? 'border-r border-surface-border' : ''} ${!day.isCurrentMonth ? 'bg-surface-container-low opacity-50' : 'hover:bg-slate-50 cursor-pointer'} ${isSelected ? 'bg-blue-50/50 ring-2 ring-blue-500 ring-inset z-1' : ''}`}
-                    onClick={() => day.isCurrentMonth && setActiveDateMenu(activeDateMenu === day.dateStr ? null : day.dateStr)}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span className={`text-sm font-data-tabular ${isSelected ? 'font-bold text-blue-700' : ''}`}>{day.date.getDate()}</span>
-                      {isSelected && (
-                        <span className="w-2 h-2 rounded-full bg-blue-600" title="Selected Date"></span>
-                      )}
-                    </div>
-                    
-                    {activeDateMenu === day.dateStr && (
-                      <div className="absolute top-8 left-2 right-2 bg-white rounded-lg shadow-lg border border-slate-200 z-20 overflow-hidden flex flex-col animate-fade-in">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDayDetails(day);
-                            setActiveDateMenu(null);
-                          }}
-                          className="text-left px-3 py-2 text-sm text-slate-800 font-bold hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-[16px] text-blue-600">info</span>
-                          View Shift & Day Details
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDateForModal(day.dateStr);
-                            setIsModalOpen(true);
-                            setActiveDateMenu(null);
-                          }}
-                          className="text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-blue-600 transition-colors border-b border-slate-100 flex items-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">event_busy</span>
-                          Request Time Off
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDateForModal(day.dateStr);
-                            setIsAvailabilityModalOpen(true);
-                            setActiveDateMenu(null);
-                          }}
-                          className="text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors flex items-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">event_available</span>
-                          Provide Availability
-                        </button>
-                      </div>
-                    )}
-
-                    {(() => {
-                      const hasApprovedPTO = day.timeOffs.some(to => to.status === 'approved');
-
-                      return (
-                        <>
-                          {/* Render Shifts ONLY if day has NO approved PTO */}
-                          {!hasApprovedPTO && day.shifts.map((assignment, idx) => {
-                            const published = isShiftPublished(assignment);
-                            return (
-                              <div 
-                                key={`shift-${idx}`} 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedDayDetails(day);
-                                }}
-                                className={`mt-2 p-2 rounded-lg text-xs font-medium transition-all shadow-xs border cursor-pointer ${
-                                  published 
-                                    ? 'bg-emerald-700 text-white border-emerald-600 hover:bg-emerald-800' 
-                                    : 'bg-slate-700 text-white border-slate-600 hover:bg-slate-800'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-1 mb-0.5">
-                                  <p className="font-bold truncate text-white">{assignment.shifts?.location?.name || 'Clinic Shift'}</p>
-                                  {published && (
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Published Shift"></span>
-                                  )}
-                                </div>
-                                <p className={published ? "text-emerald-100 text-[11px]" : "text-slate-300 text-[11px]"}>
-                                  {assignment.shifts?.start_time && assignment.shifts?.end_time
-                                    ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
-                                    : `${assignment.shifts?.time_block || 'Regular'} Shift`}
-                                </p>
-                              </div>
-                            );
-                          })}
-
-                          {/* Render Time Off Requests (Approved or Pending) */}
-                          {day.timeOffs.map((to, idx) => {
-                            const isApproved = to.status === 'approved';
-                            const isPending = to.status === 'pending';
-                            
-                            if (isApproved) {
+                        return (
+                          <div className="space-y-1">
+                            {!hasApprovedPTO && day.shifts.map((assignment, idx) => {
+                              const published = isShiftPublished(assignment);
                               return (
                                 <div 
-                                  key={`to-${idx}`} 
+                                  key={`shift-${idx}`} 
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedDayDetails(day);
                                   }}
-                                  className="mt-2 bg-emerald-600 border border-emerald-500 text-white p-2 rounded-lg text-xs font-bold shadow-xs flex items-center justify-between cursor-pointer hover:bg-emerald-700 transition-colors"
+                                  className={`p-1.5 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
+                                    published 
+                                      ? 'bg-emerald-700 text-white border-emerald-600 hover:bg-emerald-800 shadow-2xs' 
+                                      : 'bg-slate-700 text-white border-slate-600 hover:bg-slate-800 shadow-2xs'
+                                  }`}
                                 >
-                                  <div>
-                                    <p className="font-extrabold">{to.time_off_type_code || 'VAC'}</p>
-                                    <p className="text-[10px] text-emerald-100 uppercase tracking-wider font-semibold">Approved</p>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <p className="font-bold truncate text-white text-[11px]">{assignment.shifts?.location?.name || 'Clinic Shift'}</p>
+                                    {published && (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Published Shift"></span>
+                                    )}
                                   </div>
-                                  <span className="material-symbols-outlined text-base text-emerald-100">check_circle</span>
+                                  <p className={published ? "text-emerald-100 text-[10px]" : "text-slate-300 text-[10px]"}>
+                                    {assignment.shifts?.start_time && assignment.shifts?.end_time
+                                      ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
+                                      : `${assignment.shifts?.time_block || 'Regular'} Shift`}
+                                  </p>
                                 </div>
                               );
-                            } else if (isPending) {
+                            })}
+
+                            {day.timeOffs.map((to, idx) => {
+                              const isApproved = to.status === 'approved';
+                              const isPending = to.status === 'pending';
+                              
                               return (
                                 <div 
                                   key={`to-${idx}`} 
@@ -591,54 +452,39 @@ export default function StaffSchedule() {
                                     e.stopPropagation();
                                     setSelectedDayDetails(day);
                                   }}
-                                  className="mt-2 bg-amber-50 border border-amber-300 text-amber-900 p-2 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-between cursor-pointer hover:bg-amber-100 transition-colors"
-                                >
-                                  <div>
-                                    <p className="font-bold">{to.time_off_type_code || 'VAC'}</p>
-                                    <p className="text-[10px] text-amber-700 uppercase tracking-wider font-extrabold">Pending</p>
-                                  </div>
-                                  <span className="material-symbols-outlined text-base text-amber-600">hourglass_top</span>
-                                </div>
-                              );
-                            } else if (to.status === 'denied') {
-                              return (
-                                <div 
-                                  key={`to-${idx}`} 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDayDetails(day);
-                                  }}
-                                  className="mt-2 bg-rose-50 border border-rose-300 text-rose-900 p-2 rounded-lg text-xs font-semibold shadow-xs flex items-center justify-between cursor-pointer hover:bg-rose-100 transition-colors"
-                                  title={to.manager_note ? `Denial Reason: ${to.manager_note}` : 'Request Denied'}
+                                  className={`p-1.5 rounded-md text-xs font-bold flex items-center justify-between cursor-pointer border ${
+                                    isApproved 
+                                      ? 'bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700' 
+                                      : isPending 
+                                      ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100' 
+                                      : 'bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100'
+                                  }`}
                                 >
                                   <div className="truncate pr-1">
-                                    <p className="font-bold truncate">{to.time_off_type_code || 'VAC'}</p>
-                                    <p className="text-[10px] text-rose-700 uppercase tracking-wider font-extrabold truncate">
-                                      Denied {to.manager_note ? `(${to.manager_note})` : ''}
-                                    </p>
+                                    <p className="font-extrabold text-[11px] truncate">{to.time_off_type_code || 'VAC'}</p>
+                                    <p className="text-[9px] uppercase tracking-wider font-extrabold opacity-80">{to.status}</p>
                                   </div>
-                                  <span className="material-symbols-outlined text-base text-rose-600 shrink-0">cancel</span>
+                                  <span className="material-symbols-outlined text-[13px] shrink-0">
+                                    {isApproved ? 'check_circle' : isPending ? 'hourglass_top' : 'cancel'}
+                                  </span>
                                 </div>
                               );
-                            } else {
-                              return null;
-                            }
-                          })}
+                            })}
 
-                          {day.isCurrentMonth && !hasApprovedPTO && day.shifts.length === 0 && day.timeOffs.length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
-                             <div className="mt-2 bg-slate-100 text-status-off p-2 rounded text-xs font-medium border border-slate-200">
-                               <p>Off</p>
-                             </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                            {day.isCurrentMonth && !hasApprovedPTO && day.shifts.length === 0 && day.timeOffs.length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
+                              <div className="mt-1 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-200">
+                                Off
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Floating Overlay Drawer for Shift & Day Details */}
           {activeDayDetails && (

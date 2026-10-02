@@ -651,14 +651,14 @@ export default function ManagerCalendar() {
     <Layout>
       <div className="max-w-[1400px] mx-auto">
         {/* Header Section */}
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
           <div>
-            <h1 className="font-h1 text-h1 text-primary mb-1">Calendar</h1>
-            <p className="font-body-md text-on-surface-variant">
+            <h1 className="font-h1 text-2xl md:text-h1 text-primary mb-1">Manager Calendar</h1>
+            <p className="font-body-md text-sm md:text-base text-on-surface-variant">
               {monthName} • {clinicName}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
             <div className="flex items-center gap-3 text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-3 py-2 rounded-lg shadow-xs">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -710,22 +710,23 @@ export default function ManagerCalendar() {
 
         {/* Calendar Grid */}
         <div className="bg-white rounded-xl border border-surface-border shadow-sm overflow-hidden mb-12">
-          {/* Days of Week Header */}
-          <div className="grid grid-cols-7 bg-slate-50 border-b border-surface-border">
-            {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
-              <div key={day} className="px-4 py-3 text-center text-xs font-bold text-on-surface-variant uppercase tracking-wider border-r border-surface-border last:border-r-0">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Cells */}
-          {loading ? (
-            <div className="h-[600px] flex items-center justify-center">
-              <span className="text-slate-400">Loading calendar data...</span>
+          <div className="overflow-x-auto">
+            {/* Days of Week Header */}
+            <div className="grid grid-cols-7 min-w-[700px] md:min-w-0 bg-slate-50 border-b border-surface-border">
+              {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
+                <div key={day} className="px-2 md:px-4 py-3 text-center text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-wider border-r border-surface-border last:border-r-0">
+                  {day}
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="grid grid-cols-7 auto-rows-auto">
+
+            {/* Calendar Cells */}
+            {loading ? (
+              <div className="h-[600px] flex items-center justify-center">
+                <span className="text-slate-400">Loading calendar data...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-7 auto-rows-auto min-w-[700px] md:min-w-0">
               {calendarCells.map((date, idx) => {
                 const staffOff = getStaffOffOnDate(date);
                 const staffAvail = getStaffAvailOnDate(date);
@@ -1002,6 +1003,7 @@ export default function ManagerCalendar() {
               })}
             </div>
           )}
+          </div>
         </div>
       </div>
 

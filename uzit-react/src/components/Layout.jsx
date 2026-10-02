@@ -13,11 +13,12 @@ export default function Layout({ children }) {
   // Mobile Nav: Removed Employees & Shifts. At bottom show Schedule!
   const mobileNavItems = isStaff
     ? [
-        { name: 'My Schedule', icon: 'calendar_month', path: '/my-schedule' },
-        { name: 'Requests', icon: 'pending_actions', path: '/requests' },
+        { name: 'Dashboard', icon: 'dashboard', path: '/staff' },
+        { name: 'Calendar', icon: 'calendar_month', path: '/my-schedule' },
       ]
     : [
         { name: 'Schedule', icon: 'calendar_month', path: '/manager' },
+        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
       ];
 
   return (

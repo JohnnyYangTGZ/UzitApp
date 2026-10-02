@@ -678,7 +678,7 @@ export default function Scheduler() {
   }, [selectedDate, weekDates]);
 
   // Drag & Drop / Sidebar States
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
   const [searchPool, setSearchPool] = useState('');
   const [rolePoolFilter, setRolePoolFilter] = useState('All');
   const [toast, setToast] = useState(null);
@@ -1671,21 +1671,21 @@ export default function Scheduler() {
 
   return (
     <Layout>
-      <div className="p-8 space-y-6 max-w-[1600px] mx-auto h-[calc(100vh-4rem)] flex flex-col">
+      <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-[1600px] mx-auto min-h-screen md:h-[calc(100vh-4rem)] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between shrink-0 gap-4 flex-wrap">
-          <div className="flex items-center gap-6">
+        <div className="flex items-center justify-between shrink-0 gap-3 flex-wrap">
+          <div className="flex flex-wrap items-center gap-3 md:gap-6">
             <div>
-              <div className="flex items-center gap-3 mb-1">
-                <span className="material-symbols-outlined text-3xl text-blue-600">calendar_month</span>
-                <h1 className="font-h1 text-h1 text-on-surface">Schedule</h1>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="material-symbols-outlined text-2xl md:text-3xl text-blue-600">calendar_month</span>
+                <h1 className="font-h1 text-xl md:text-h1 text-on-surface">Schedule</h1>
               </div>
-              <p className="text-xs font-semibold text-slate-500">
+              <p className="text-[11px] md:text-xs font-semibold text-slate-500">
                 Daily Schedule for {clinicName}
               </p>
             </div>
 
-            <div className="h-10 w-px bg-slate-200"></div>
+            <div className="hidden sm:block h-10 w-px bg-slate-200"></div>
 
             {/* Role Filter */}
             <div className="flex flex-col items-start">
