@@ -588,7 +588,7 @@ const CoverageCell = ({
                     e.stopPropagation();
                     if (onRemoveAssign) onRemoveAssign(emp.user_id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded"
+                  className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded"
                   title="Remove shift assignment"
                 >
                   <span className="material-symbols-outlined text-[13px] block">close</span>
@@ -2288,7 +2288,7 @@ export default function Scheduler() {
                   console.error(err);
                 }
               }}
-              className={`w-80 bg-white rounded-xl border border-surface-border shadow-sm flex flex-col overflow-hidden shrink-0 transition-all ${
+              className={`hidden md:flex w-80 bg-white rounded-xl border border-surface-border shadow-sm flex-col overflow-hidden shrink-0 transition-all ${
                 isPoolDragOver ? 'ring-4 ring-rose-400 border-rose-500 bg-rose-50/80' : ''
               }`}
             >
@@ -2429,6 +2429,117 @@ export default function Scheduler() {
             </div>
           )}
         </div>
+
+        {/* Mobile Staff Pool Bottom Sheet Modal */}
+        {showSidebar && (
+          <div 
+            className="fixed inset-0 z-50 flex flex-col justify-end bg-slate-900/60 backdrop-blur-xs md:hidden"
+            onClick={() => setShowSidebar(false)}
+          >
+            <div 
+              className="bg-white rounded-t-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 shadow-2xl border-t border-slate-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between sticky top-0 z-10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-blue-600 text-xl">group</span>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Staff Pool</h3>
+                    <p className="text-xs text-slate-500 font-medium">Available staff for assignments</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                    {filteredPoolEmps.length}
+                  </span>
+                  <button 
+                    onClick={() => setShowSidebar(false)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200"
+                  >
+                    <span className="material-symbols-outlined text-xl">close</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Filters inside mobile bottom sheet */}
+              <div className="p-3 border-b border-slate-100 space-y-2 bg-white shrink-0">
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-2.5 top-2.5 text-slate-400 text-sm">search</span>
+                  <input 
+                    type="text"
+                    placeholder="Search staff..."
+                    value={searchPool}
+                    onChange={(e) => setSearchPool(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <select
+                  value={rolePoolFilter}
+                  onChange={(e) => setRolePoolFilter(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-1.5 text-xs font-semibold text-slate-700 outline-none"
+                >
+                  <option value="All">All Roles ({employees.length})</option>
+                  {availableRoles.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Scrollable Staff Member Cards */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50">
+                {filteredPoolEmps.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <span className="material-symbols-outlined text-3xl mb-1 block">search_off</span>
+                    <p className="text-xs font-semibold">No staff found matching filters</p>
+                  </div>
+                ) : (
+                  filteredPoolEmps.map(emp => {
+                    const needsAssignment = isEmpScheduledToday(emp);
+                    const remaining = getShiftsRemainingCount(emp);
+                    const expected = getExpectedWeeklyShiftsCount(emp);
+                    const isPartiallyAssigned = expected > 0 && remaining > 0;
+                    const displayCount = remaining > 0 ? remaining : (needsAssignment ? 1 : 0);
+
+                    return (
+                      <div 
+                        key={emp.id}
+                        className="bg-white border border-slate-200 p-3 rounded-xl flex items-center justify-between shadow-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 ${
+                            needsAssignment ? 'bg-amber-600 text-white' : isPartiallyAssigned ? 'bg-blue-700 text-white' : 'bg-blue-900 text-white'
+                          }`}>
+                            {emp.users?.name?.charAt(0) || '?'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-slate-900 text-sm leading-tight">{emp.users?.name}</p>
+                              {displayCount > 0 && (
+                                <span className="bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+                                  +{displayCount}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-1.5 py-0.2 rounded uppercase">
+                                {emp.staffing_role}
+                              </span>
+                              {emp.secondary_roles && emp.secondary_roles.length > 0 && (
+                                <span className="text-[10px] font-semibold text-slate-500">
+                                  +{emp.secondary_roles.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Publish Confirmation Modal */}
         {showPublishModal && (

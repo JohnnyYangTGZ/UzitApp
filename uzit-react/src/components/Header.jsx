@@ -27,15 +27,24 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 w-full h-16 z-50 border-b border-slate-200 bg-white flex items-center justify-between px-6 font-['Inter'] text-sm tracking-tight">
-      <div className="flex items-center gap-8 w-64">
+    <header className="fixed top-0 w-full h-16 z-40 border-b border-slate-200 bg-white flex items-center justify-between px-3 md:px-6 font-['Inter'] text-sm tracking-tight">
+      <div className="flex items-center gap-2 md:gap-8 min-w-0 flex-1 md:flex-none md:w-64">
+        {/* Mobile Sidebar Toggle Button */}
+        <button 
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
+          className="md:hidden text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 flex items-center shrink-0"
+          title="Open Menu"
+        >
+          <span className="material-symbols-outlined text-2xl">menu</span>
+        </button>
+
         {loadingDepartments ? (
-          <div className="text-slate-500 text-xs">Loading departments...</div>
+          <div className="text-slate-500 text-xs">Loading...</div>
         ) : (
           <select 
             value={selectedDepartmentId}
             onChange={(e) => setSelectedDepartmentId(e.target.value)}
-            className="w-full bg-white border border-slate-200 text-slate-900 font-bold py-2 px-3 rounded-lg focus:ring-2 focus:ring-primary outline-none shadow-sm"
+            className="w-full max-w-[180px] md:max-w-none bg-white border border-slate-200 text-slate-900 font-bold py-1.5 md:py-2 px-2.5 md:px-3 rounded-lg focus:ring-2 focus:ring-primary outline-none shadow-sm text-xs md:text-sm truncate"
           >
             {departments.map(dept => (
               <option key={dept.id} value={dept.id}>{dept.name}</option>
@@ -44,26 +53,26 @@ export default function Header() {
         )}
       </div>
       
-      <div className="flex items-center gap-4">
-        <button className="p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
-          <span className="material-symbols-outlined">notifications</span>
+      <div className="flex items-center gap-2 md:gap-4 shrink-0">
+        <button className="p-1.5 md:p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
+          <span className="material-symbols-outlined text-xl md:text-2xl">notifications</span>
         </button>
-        <button className="p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
-          <span className="material-symbols-outlined">help</span>
+        <button className="hidden sm:block p-1.5 md:p-2 hover:bg-slate-50 transition-colors rounded-full text-slate-500">
+          <span className="material-symbols-outlined text-xl md:text-2xl">help</span>
         </button>
-        <div className="relative flex items-center gap-2 pl-2 ml-2 border-l border-slate-200" ref={dropdownRef}>
+        <div className="relative flex items-center gap-2 pl-1.5 md:pl-2 ml-1 md:ml-2 border-l border-slate-200" ref={dropdownRef}>
           <button 
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2 hover:bg-slate-50 p-1 pr-2 rounded-lg transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 md:gap-2 hover:bg-slate-50 p-1 pr-1.5 md:pr-2 rounded-lg transition-colors cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-200">
+            <div className="w-7 h-7 md:w-8 md:h-8 rounded-full overflow-hidden bg-slate-200 shrink-0">
               <img 
                 alt="User profile" 
                 className="w-full h-full object-cover" 
                 src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZh82-MiQXypUTSzk1Zv6MilKiH9M1qVWLCWXlX22MuwpjMLH0I6rjozMhIZzlVcF67SbEM-KGO6k5ZP9GV3PV6rZCRNLKyA9rD_e2yyML9aMpVLbBGe_4u6Llr_FNdV-LuZszbLnCqiI-CrqQhhxnjV_ZTqjjC713TDH8EnECh0mCwxS5oIYqZ1h8-Oc7mcetBv0fuaoM_VICZjow4I59BvcG7XDU6R7_NuGssqqQbkaxHbrBZ3vQfewawZJmiVCvxl1HEsUJGv3q"
               />
             </div>
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-slate-700 text-xs md:text-sm hidden sm:inline">
               {activeRole === 'admin' ? 'Admin Dashboard' : activeRole === 'manager' ? 'Manager Dashboard' : (user?.name || user?.email)}
             </span>
             <span className="material-symbols-outlined text-sm text-slate-400">expand_more</span>
