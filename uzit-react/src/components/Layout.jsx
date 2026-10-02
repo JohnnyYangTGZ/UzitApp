@@ -9,18 +9,19 @@ export default function Layout({ children }) {
   const role = activeRole || user?.role;
 
   const isStaff = role === 'staff';
-  const isAdmin = role === 'admin';
 
+  // Simplified Mobile Nav: Admin piece removed, focusing on Manager Dashboard or Employee View
   const mobileNavItems = isStaff
     ? [
         { name: 'Dashboard', icon: 'dashboard', path: '/staff' },
-        { name: 'Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
+        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
         { name: 'Requests', icon: 'pending_actions', path: '/requests' },
       ]
     : [
-        { name: 'Schedule', icon: 'calendar_month', path: isAdmin ? '/scheduler' : '/manager' },
+        { name: 'Manager', icon: 'dashboard', path: '/manager' },
+        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
         { name: 'Employees', icon: 'group', path: '/employees' },
-        { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
+        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
       ];
 
   return (
@@ -32,7 +33,7 @@ export default function Layout({ children }) {
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Simplified Mobile Bottom Navigation Bar */}
       <nav className="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 px-2 py-1.5 justify-around items-center shadow-lg">
         {mobileNavItems.map((item) => {
           const isActive = location.pathname === item.path;

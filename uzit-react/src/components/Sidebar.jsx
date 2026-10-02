@@ -65,12 +65,22 @@ export default function Sidebar() {
 
   const adminItems = [
     { name: 'Admin Dashboard', icon: 'dashboard', path: '/admin' },
-    { name: 'Schedule', icon: 'calendar_month', path: '/scheduler' },
+    { name: 'Schedule Editor', icon: 'calendar_month', path: '/scheduler' },
     { name: 'Employees', icon: 'group', path: '/employees' },
     { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
   ];
 
-  const navItems = isAdmin ? adminItems : isStaff ? staffItems : managerItems;
+  // Streamlined mobile items: Removes complex admin tools on mobile devices
+  const mobileItems = isStaff
+    ? staffItems
+    : [
+        { name: 'Manager\'s Dashboard', icon: 'dashboard', path: '/manager' },
+        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
+        { name: 'Employees', icon: 'group', path: '/employees' },
+        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
+      ];
+
+  const desktopItems = isAdmin ? adminItems : isStaff ? staffItems : managerItems;
 
   return (
     <>
@@ -119,24 +129,49 @@ export default function Sidebar() {
           )}
         </div>
         
+        {/* Navigation Items (Mobile vs Desktop) */}
         <nav className="flex-1 px-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link 
-                key={item.name}
-                to={item.path}
-                className={`flex items-center px-4 py-3 gap-3 transition-all rounded-lg ${
-                  isActive 
-                    ? 'bg-blue-50 text-blue-800 border-r-4 border-blue-700' 
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700'
-                }`}
-              >
-                <span className="material-symbols-outlined">{item.icon}</span>
-                {item.name}
-              </Link>
-            );
-          })}
+          {/* Mobile Menu Items */}
+          <div className="block md:hidden space-y-1">
+            {mobileItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link 
+                  key={item.name}
+                  to={item.path}
+                  className={`flex items-center px-4 py-3 gap-3 transition-all rounded-lg ${
+                    isActive 
+                      ? 'bg-blue-50 text-blue-800 border-r-4 border-blue-700 font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700'
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Desktop Menu Items */}
+          <div className="hidden md:block space-y-1">
+            {desktopItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link 
+                  key={item.name}
+                  to={item.path}
+                  className={`flex items-center px-4 py-3 gap-3 transition-all rounded-lg ${
+                    isActive 
+                      ? 'bg-blue-50 text-blue-800 border-r-4 border-blue-700 font-bold' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-blue-700'
+                  }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         <div className="mt-auto px-4 space-y-1">
@@ -166,7 +201,7 @@ export default function Sidebar() {
             </button>
           )}
           {isAdmin && (
-            <Link to="/settings" className="text-slate-600 flex items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all rounded-lg">
+            <Link to="/settings" className="hidden md:flex text-slate-600 items-center px-4 py-3 gap-3 hover:bg-slate-100 transition-all rounded-lg">
               <span className="material-symbols-outlined">settings</span>
               Settings
             </Link>

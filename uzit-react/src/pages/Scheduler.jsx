@@ -1811,6 +1811,20 @@ export default function Scheduler() {
           </div>
         )}
 
+        {/* Simplified Mobile Banner */}
+        <div className="block md:hidden bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-600 text-base">smartphone</span>
+            <p className="font-semibold">Streamlined Mobile View</p>
+          </div>
+          <button
+            onClick={() => navigate('/manager')}
+            className="px-2.5 py-1 bg-white border border-blue-300 text-blue-700 font-bold rounded-lg hover:bg-blue-100 transition-colors shadow-2xs"
+          >
+            Manager Dashboard
+          </button>
+        </div>
+
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
           {/* Left: Schedule Table / Mobile Card View */}
