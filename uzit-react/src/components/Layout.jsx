@@ -10,18 +10,14 @@ export default function Layout({ children }) {
 
   const isStaff = role === 'staff';
 
-  // Simplified Mobile Nav: Admin piece removed, focusing on Manager Dashboard or Employee View
+  // Mobile Nav: Removed Employees & Shifts. At bottom show Schedule!
   const mobileNavItems = isStaff
     ? [
-        { name: 'Dashboard', icon: 'dashboard', path: '/staff' },
-        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
+        { name: 'My Schedule', icon: 'calendar_month', path: '/my-schedule' },
         { name: 'Requests', icon: 'pending_actions', path: '/requests' },
       ]
     : [
-        { name: 'Manager', icon: 'dashboard', path: '/manager' },
-        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
-        { name: 'Employees', icon: 'group', path: '/employees' },
-        { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
+        { name: 'Schedule', icon: 'calendar_month', path: '/manager' },
       ];
 
   return (
@@ -33,7 +29,7 @@ export default function Layout({ children }) {
         {children}
       </main>
 
-      {/* Simplified Mobile Bottom Navigation Bar */}
+      {/* Simplified Mobile Bottom Navigation Bar: Schedule Focus */}
       <nav className="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 px-2 py-1.5 justify-around items-center shadow-lg">
         {mobileNavItems.map((item) => {
           const isActive = location.pathname === item.path;

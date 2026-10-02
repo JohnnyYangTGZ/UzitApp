@@ -70,13 +70,11 @@ export default function Sidebar() {
     { name: 'Shifts', icon: 'calendar_view_week', path: '/shifts' },
   ];
 
-  // Streamlined mobile items: Removes complex admin tools on mobile devices
+  // Mobile navigation: Employees & Shifts removed. Focuses exclusively on Schedule!
   const mobileItems = isStaff
     ? staffItems
     : [
-        { name: 'Manager\'s Dashboard', icon: 'dashboard', path: '/manager' },
-        { name: 'Calendar', icon: 'event_busy', path: '/manager/calendar' },
-        { name: 'Employees', icon: 'group', path: '/employees' },
+        { name: 'Schedule', icon: 'calendar_month', path: '/manager' },
         { name: 'My Schedule', icon: 'calendar_view_week', path: '/my-schedule' },
       ];
 

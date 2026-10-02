@@ -421,6 +421,112 @@ export default function ManagerDashboard() {
               Download Report
             </button>
           </div>
+        {/* Pending Time Off Requests (Top Priority for Quick Approval on Mobile) */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg sm:text-xl font-bold text-on-background flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-500 text-xl">pending_actions</span>
+              Pending Time Off Requests
+            </h2>
+            <button 
+              onClick={() => navigate('/manager/calendar')} 
+              className="text-primary text-xs font-bold hover:underline"
+            >
+              View All
+            </button>
+          </div>
+          
+          {loadingRequests ? (
+            <div className="p-6 bg-white rounded-xl border border-surface-border text-center text-slate-400 text-xs">
+              Loading pending requests...
+            </div>
+          ) : pendingRequests.length === 0 ? (
+            <div className="bg-white rounded-xl border border-surface-border p-6 text-center text-slate-500 shadow-xs flex items-center justify-center gap-3">
+              <span className="material-symbols-outlined text-2xl text-emerald-500">check_circle</span>
+              <div className="text-left">
+                <p className="font-bold text-slate-800 text-xs sm:text-sm">No pending time off requests</p>
+                <p className="text-[11px] text-slate-400">All staff time off requests for this clinic have been reviewed.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {pendingRequests.map(req => {
+                const rawProfile = req.users?.employee_profiles;
+                const empProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
+                const empName = req.users?.name || 'Staff Member';
+                const empRole = empProfile?.job_title || empProfile?.staffing_role || 'Staff';
+                const firstLetter = empName.charAt(0).toUpperCase();
+
+                return (
+                  <div key={req.id} className="bg-white rounded-xl border border-surface-border shadow-xs p-4 flex flex-col gap-3 relative overflow-hidden transition-all hover:shadow-md">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-400"></div>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-base border border-amber-200 shrink-0">
+                          {firstLetter}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-sm leading-tight">{empName}</p>
+                          <p className="text-xs text-slate-500 font-medium">{empRole}</p>
+                        </div>
+                      </div>
+                      <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Pending</span>
+                    </div>
+                    
+                    <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-100 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">calendar_month</span> Dates
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {formatDateRange(req.start_date, req.end_date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">schedule</span> Time
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {formatTimeRange(req.start_time, req.end_time)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">flight_takeoff</span> Type
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {getTypeCodeLabel(req.time_off_type_code)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {req.reason ? (
+                      <p className="text-xs text-slate-600 italic">"{req.reason}"</p>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic">No note provided.</p>
+                    )}
+                    
+                    <div className="flex gap-2.5 mt-auto pt-1">
+                      <button 
+                        onClick={() => handleOpenDenyModal(req)}
+                        className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-1.5 rounded-lg text-xs font-bold transition-colors flex justify-center items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                        Deny
+                      </button>
+                      <button 
+                        onClick={() => handleApproveRequest(req.id)}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs py-1.5 rounded-lg text-xs font-bold transition-all flex justify-center items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">check</span>
+                        Approve
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 7-Day Matrix */}
@@ -690,112 +796,6 @@ export default function ManagerDashboard() {
           </div>
         </div>
 
-        {/* Pending Time Off Requests (Live Database Linked) */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-h2 font-h2 text-on-background">
-              Pending Time Off Requests
-            </h2>
-            <button 
-              onClick={() => navigate('/manager/calendar')} 
-              className="text-primary font-label-sm hover:underline"
-            >
-              View All Requests
-            </button>
-          </div>
-          
-          {loadingRequests ? (
-            <div className="p-8 bg-white rounded-xl border border-surface-border text-center text-slate-400">
-              Loading pending requests...
-            </div>
-          ) : pendingRequests.length === 0 ? (
-            <div className="bg-white rounded-xl border border-surface-border p-8 text-center text-slate-500 shadow-sm flex flex-col items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-3xl text-emerald-500">check_circle</span>
-              <p className="font-semibold text-slate-700">No pending time off requests</p>
-              <p className="text-xs text-slate-400">All staff time off requests for this clinic have been reviewed.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {pendingRequests.map(req => {
-                const rawProfile = req.users?.employee_profiles;
-                const empProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
-                const empName = req.users?.name || 'Staff Member';
-                const empRole = empProfile?.job_title || empProfile?.staffing_role || 'Staff';
-                const firstLetter = empName.charAt(0).toUpperCase();
-
-                return (
-                  <div key={req.id} className="bg-white rounded-xl border border-surface-border shadow-sm p-5 flex flex-col gap-4 relative overflow-hidden transition-all hover:shadow-md">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-lg border border-amber-200">
-                          {firstLetter}
-                        </div>
-                        <div>
-                          <p className="font-bold text-on-surface">{empName}</p>
-                          <p className="text-xs text-on-surface-variant font-medium">{empRole}</p>
-                        </div>
-                      </div>
-                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Pending</span>
-                    </div>
-                    
-                    <div className="bg-slate-50 rounded-lg p-3.5 border border-slate-100 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[14px]">calendar_month</span> Dates
-                        </span>
-                        <span className="text-sm font-bold text-slate-700">
-                          {formatDateRange(req.start_date, req.end_date)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[14px]">schedule</span> Time
-                        </span>
-                        <span className="text-sm font-bold text-slate-700">
-                          {formatTimeRange(req.start_time, req.end_time)}
-                        </span>
-                      </div>
-                      <div className="w-full h-px bg-slate-200"></div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[14px]">flight_takeoff</span> Type
-                        </span>
-                        <span className="text-sm font-bold text-slate-700">
-                          {getTypeCodeLabel(req.time_off_type_code)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {req.reason ? (
-                      <p className="text-sm text-slate-600 italic">"{req.reason}"</p>
-                    ) : (
-                      <p className="text-xs text-slate-400 italic">No note provided.</p>
-                    )}
-                    
-                    <div className="flex gap-3 mt-auto pt-2">
-                      <button 
-                        onClick={() => handleOpenDenyModal(req)}
-                        className="flex-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 py-2 rounded-lg text-sm font-bold transition-colors flex justify-center items-center gap-1"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">close</span>
-                        Deny
-                      </button>
-                      <button 
-                        onClick={() => handleApproveRequest(req.id)}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow py-2 rounded-lg text-sm font-bold transition-all flex justify-center items-center gap-1"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">check</span>
-                        Approve
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
       </div>
 
       {/* Deny Request Modal */}
@@ -872,6 +872,7 @@ export default function ManagerDashboard() {
           </div>
         </div>
       )}
+      </div>
     </Layout>
   );
 }
