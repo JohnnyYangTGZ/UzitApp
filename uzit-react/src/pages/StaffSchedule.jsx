@@ -323,7 +323,144 @@ export default function StaffSchedule() {
 
         {/* Calendar & Floating Details Section */}
         <div className="relative bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden w-full">
-          <div className="grid grid-cols-7 border-b border-surface-border bg-surface-container-lowest">
+          {/* Mobile Agenda List (< md) */}
+          <div className="block md:hidden p-3 space-y-3 bg-slate-50/50">
+            <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="font-bold text-sm text-slate-900">{monthName}</span>
+              <button
+                onClick={() => {
+                  setSelectedDateForModal(new Date().toISOString().split('T')[0]);
+                  setIsModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-xs"
+              >
+                <span className="material-symbols-outlined text-[15px]">add</span>
+                Request Time Off
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center text-slate-500 text-xs">Loading schedule...</div>
+            ) : (
+              calendarDays
+                .filter(day => day.isCurrentMonth)
+                .map((day) => {
+                  const isToday = new Date().toDateString() === day.date.toDateString();
+                  const hasApprovedPTO = day.timeOffs.some(to => to.status === 'approved');
+
+                  return (
+                    <div 
+                      key={day.dateStr}
+                      className={`bg-white border rounded-xl p-3.5 shadow-2xs space-y-2 transition-all ${
+                        isToday ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold ${isToday ? 'text-blue-700' : 'text-slate-900'}`}>
+                            {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </span>
+                          {isToday && (
+                            <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Today</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedDateForModal(day.dateStr);
+                            setIsModalOpen(true);
+                          }}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">event_busy</span>
+                          Request Off
+                        </button>
+                      </div>
+
+                      {/* Shifts */}
+                      {!hasApprovedPTO && day.shifts.map((assignment, sIdx) => {
+                        const published = isShiftPublished(assignment);
+                        return (
+                          <div 
+                            key={`m-shift-${sIdx}`}
+                            onClick={() => setSelectedDayDetails(day)}
+                            className={`p-2.5 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer border ${
+                              published 
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                                : 'bg-slate-50 border-slate-200 text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`material-symbols-outlined text-base ${published ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                event_available
+                              </span>
+                              <div>
+                                <p className="font-bold">{assignment.shifts?.location?.name || 'Clinic Shift'}</p>
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  {assignment.shifts?.start_time && assignment.shifts?.end_time
+                                    ? `${formatTime(assignment.shifts.start_time)} - ${formatTime(assignment.shifts.end_time)}`
+                                    : `${assignment.shifts?.time_block || 'Regular'} Shift`}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ${
+                              published ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              {published ? 'Published' : 'Draft'}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Time Off Requests */}
+                      {day.timeOffs.map((to, tIdx) => {
+                        const isApproved = to.status === 'approved';
+                        const isPending = to.status === 'pending';
+                        return (
+                          <div 
+                            key={`m-to-${tIdx}`}
+                            onClick={() => setSelectedDayDetails(day)}
+                            className={`p-2.5 rounded-lg text-xs font-bold flex items-center justify-between cursor-pointer border ${
+                              isApproved 
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                                : isPending
+                                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                                : 'bg-rose-50 border-rose-200 text-rose-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`material-symbols-outlined text-base ${
+                                isApproved ? 'text-emerald-600' : isPending ? 'text-amber-600' : 'text-rose-600'
+                              }`}>
+                                {isApproved ? 'check_circle' : isPending ? 'hourglass_top' : 'block'}
+                              </span>
+                              <div>
+                                <p className="font-bold">{to.time_off_type_code || 'VAC'} Time Off</p>
+                                <p className="text-[11px] opacity-80 font-medium">
+                                  {to.start_time && to.end_time ? `${formatTime(to.start_time)} - ${formatTime(to.end_time)}` : 'Full Day'}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ${
+                              isApproved ? 'bg-emerald-100 text-emerald-800' : isPending ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {to.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {day.shifts.length === 0 && day.timeOffs.length === 0 && (
+                        <p className="text-[11px] text-slate-400 italic">No shifts or time off scheduled</p>
+                      )}
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          {/* Desktop Monthly Grid View (>= md) */}
+          <div className="hidden md:block">
+            <div className="grid grid-cols-7 border-b border-surface-border bg-surface-container-lowest">
             {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
               <div key={day} className={`py-4 text-center font-label-sm text-on-surface-variant ${day !== 'SAT' ? 'border-r border-surface-border' : ''}`}>{day}</div>
             ))}
@@ -501,6 +638,7 @@ export default function StaffSchedule() {
               })}
             </div>
           )}
+        </div>
 
           {/* Floating Overlay Drawer for Shift & Day Details */}
           {activeDayDetails && (

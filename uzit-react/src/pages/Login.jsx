@@ -11,9 +11,12 @@ export default function Login() {
 
   useEffect(() => {
     if (user && !loading) {
-      if (user.role === 'admin') navigate('/admin');
-      else if (user.role === 'manager') navigate('/manager');
-      else navigate('/staff');
+      const isMobile = window.innerWidth < 768;
+      if (user.role === 'admin' || user.role === 'manager') {
+        navigate(isMobile ? '/manager' : (user.role === 'admin' ? '/admin' : '/manager'));
+      } else {
+        navigate(isMobile ? '/my-schedule' : '/staff');
+      }
     }
   }, [user, loading, navigate]);
 
@@ -28,12 +31,11 @@ export default function Login() {
 
     try {
       const user = await login(email, password);
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'manager') {
-        navigate('/manager');
+      const isMobile = window.innerWidth < 768;
+      if (user.role === 'admin' || user.role === 'manager') {
+        navigate(isMobile ? '/manager' : (user.role === 'admin' ? '/admin' : '/manager'));
       } else {
-        navigate('/staff');
+        navigate(isMobile ? '/my-schedule' : '/staff');
       }
     } catch (err) {
       setError('Failed to log in: ' + err.message);
@@ -98,19 +100,13 @@ export default function Login() {
             {error && <p className="text-error font-body-md">{error}</p>}
 
             <button 
-              className="w-full py-4 bg-secondary text-on-primary font-h3 text-body-lg rounded-lg shadow-sm hover:brightness-110 active:scale-98 transition-all disabled:opacity-50" 
-              type="submit"
+              type="submit" 
+              className="w-full py-3 bg-primary text-on-primary font-label-md rounded-lg shadow-sm hover:opacity-90 transition-all font-bold"
               disabled={loading}
             >
               {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
-
-          <div className="mt-12 text-center">
-            <p className="text-on-surface-variant font-body-md text-body-md">
-              Secure access for authorized personnel only.
-            </p>
-          </div>
         </div>
       </div>
     </div>

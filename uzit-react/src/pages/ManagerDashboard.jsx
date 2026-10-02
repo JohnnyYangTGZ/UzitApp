@@ -872,6 +872,16 @@ export default function ManagerDashboard() {
           </div>
         </div>
       )}
+        {/* Bottom Schedule Button */}
+        <div className="pt-4 pb-6">
+          <button 
+            onClick={() => navigate('/scheduler')} 
+            className="w-full py-3.5 px-6 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-xl flex items-center justify-center gap-2.5 shadow-md transition-all text-sm sm:text-base cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-xl sm:text-2xl">calendar_month</span>
+            Go to Full Schedule Page
+          </button>
+        </div>
       </div>
     </Layout>
   );
