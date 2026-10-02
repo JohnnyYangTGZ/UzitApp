@@ -666,6 +666,16 @@ export default function Scheduler() {
   const [weeklyTimeOffData, setWeeklyTimeOffData] = useState([]);
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
+  const [mobileDayIdx, setMobileDayIdx] = useState(0);
+
+  useEffect(() => {
+    if (selectedDate && weekDates.length === 7) {
+      const [y, m, d] = selectedDate.split('-');
+      const target = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      const dayOfWeek = target.getDay();
+      setMobileDayIdx(dayOfWeek);
+    }
+  }, [selectedDate, weekDates]);
 
   // Drag & Drop / Sidebar States
   const [showSidebar, setShowSidebar] = useState(true);
@@ -1802,11 +1812,205 @@ export default function Scheduler() {
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
-          {/* Left: Schedule Table */}
+        <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+          {/* Left: Schedule Table / Mobile Card View */}
           <div className="flex-1 bg-white rounded-xl border border-surface-border shadow-sm flex flex-col overflow-hidden">
-            {activeTab === 'shifts' ? (
-              <div className="overflow-auto flex-1">
+            {/* Mobile Day Selector Bar */}
+            <div className="flex md:hidden items-center overflow-x-auto gap-1.5 p-2 bg-slate-100 border-b border-slate-200 sticky top-0 z-10 shrink-0">
+              {weekDates.map((dateObj, idx) => {
+                const isSelected = mobileDayIdx === idx;
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+                const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setMobileDayIdx(idx)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex flex-col items-center min-w-[58px] shrink-0 border ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase tracking-wider opacity-80">{dayName}</span>
+                    <span className="text-xs">{dateStr}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mobile Single Day View */}
+            <div className="block md:hidden overflow-auto flex-1 p-3 space-y-4">
+              {loading ? (
+                <div className="p-12 text-center text-slate-500">
+                  <span className="material-symbols-outlined animate-spin text-4xl text-blue-600 mb-4 block">sync</span>
+                  <p className="font-semibold">Calculating daily schedule matches...</p>
+                </div>
+              ) : activeTab === 'shifts' ? (
+                shifts.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">
+                    <p className="font-semibold">No shifts configured for {clinicName}.</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const filteredShifts = shifts.filter(s => roleFilter === 'All' || s.staffing_role === roleFilter);
+                    const rolesSet = Array.from(new Set(filteredShifts.map(s => s.staffing_role).filter(Boolean))).sort();
+                    const targetDateObj = weekDates[mobileDayIdx];
+
+                    if (!targetDateObj) return null;
+
+                    return rolesSet.map(role => {
+                      const roleShifts = filteredShifts.filter(s => s.staffing_role === role).sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+                      
+                      const shiftGroups = {};
+                      roleShifts.forEach(shift => {
+                        const key = shift.id;
+                        if (!shiftGroups[key]) {
+                          shiftGroups[key] = {
+                            custom_id: shift.custom_id,
+                            start_time: shift.start_time,
+                            end_time: shift.end_time,
+                            time_block: shift.time_block,
+                            staffing_role: shift.staffing_role,
+                            shifts: []
+                          };
+                        }
+                        shiftGroups[key].shifts.push(shift);
+                      });
+
+                      return (
+                        <div key={role} className="space-y-3">
+                          <div className="bg-slate-200/70 px-3 py-1 rounded-md font-bold text-slate-800 text-xs uppercase tracking-wider">
+                            {role}
+                          </div>
+                          {Object.values(shiftGroups).map((group, groupIdx) => {
+                            let reqCount = 0;
+                            let employees = [];
+                            let availableCandidates = [];
+                            let isActive = false;
+                            let customTime = null;
+
+                            group.shifts.forEach(shift => {
+                              const dayData = weeklyAssignments[shift.id]?.[mobileDayIdx];
+                              if (dayData && dayData.isActive) {
+                                isActive = true;
+                                reqCount += (shift.required_count || 1);
+                                if (dayData.employees) {
+                                  employees = [...employees, ...dayData.employees];
+                                }
+                                if (dayData.availableCandidates) {
+                                  availableCandidates = [...availableCandidates, ...dayData.availableCandidates];
+                                }
+                                if (dayData.customTime) {
+                                  customTime = dayData.customTime;
+                                }
+                              }
+                            });
+
+                            availableCandidates = availableCandidates.filter((cand, index, self) => 
+                              index === self.findIndex(c => c.id === cand.id)
+                            );
+
+                            const defaultTimeStr = group.start_time && group.end_time 
+                              ? `${group.start_time.slice(0,5)}-${group.end_time.slice(0,5)}` 
+                              : group.time_block;
+                              
+                            const effectiveTime = customTime || defaultTimeStr;
+
+                            return (
+                              <div key={groupIdx} className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs space-y-2">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                  <div>
+                                    <h4 className="font-bold text-slate-900 text-sm">{group.custom_id || 'Unnamed Shift'}</h4>
+                                    <span className="text-xs text-slate-500 font-medium">
+                                      {effectiveTime}
+                                    </span>
+                                  </div>
+                                  <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded ${isActive ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-500'}`}>
+                                    {isActive ? `Req: ${reqCount}` : 'Inactive'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <CoverageCell 
+                                    isActive={isActive} 
+                                    reqCount={reqCount} 
+                                    employees={employees} 
+                                    shiftTime={effectiveTime}
+                                    shiftRole={group.staffing_role}
+                                    shiftCustomId={group.custom_id}
+                                    dateObj={targetDateObj}
+                                    draggedItem={draggedItem}
+                                    availableCandidates={availableCandidates}
+                                    onAssign={(candidate, customStart, customEnd) => handleAssign(group.custom_id, group.staffing_role, group.start_time, group.end_time, targetDateObj, candidate.user_id, customStart, customEnd)}
+                                    onRemoveAssign={(userId) => handleRemoveAssignment(group.custom_id, targetDateObj, userId)}
+                                    onRoleMismatch={(userName, role, requiredRole) => showToastNotification(`Cannot assign ${userName}: Role (${role || 'None'}) does not match required ${requiredRole}`, 'error')}
+                                    onDragAssignedStart={(emp, shiftCustomId, dateObj) => setDraggedItem({ type: 'ASSIGNED_EMPLOYEE', userId: emp.user_id, userName: emp.users?.name, shiftCustomId, dateObj })}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    });
+                  })()
+                )
+              ) : (
+                employees.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">
+                    <p className="font-semibold">No employees found.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {[...employees]
+                      .filter(e => roleFilter === 'All' || e.staffing_role === roleFilter)
+                      .sort((a, b) => (a.users?.name || '').localeCompare(b.users?.name || ''))
+                      .map((emp) => {
+                        const dayData = employeeAssignments[emp.id]?.days?.[mobileDayIdx];
+                        return (
+                          <div key={emp.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                {emp.users?.name?.charAt(0) || '?'}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 text-sm leading-tight">{emp.users?.name}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                    {emp.staffing_role}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    {emp.shift_time || 'No times'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              {!dayData || !dayData.isActive ? (
+                                <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md">Off</span>
+                              ) : dayData.shifts && dayData.shifts.length > 0 ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  {dayData.shifts.map((shift, shiftIdx) => (
+                                    <span key={shiftIdx} className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                                      {shift.custom_id || shift.id.split('-')[0]}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 border-dashed px-2 py-1 rounded-md">Available</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-auto flex-1">
+              {activeTab === 'shifts' ? (
+                <div className="overflow-auto flex-1">
                 <table className="w-full text-left border-collapse min-w-[1200px]">
                   <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                     <tr>
@@ -2046,6 +2250,7 @@ export default function Scheduler() {
                 </table>
               </div>
             )}
+            </div>
           </div>
 
           {/* Right: Available Staff Pool (Drag & Drop Panel) */}
