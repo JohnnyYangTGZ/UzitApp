@@ -89,15 +89,20 @@ export default function Sidebar() {
         />
       )}
 
-      <aside className={`fixed left-0 top-0 h-full w-64 border-r border-slate-200 z-50 bg-slate-50 font-['Inter'] font-medium text-sm flex flex-col pt-20 pb-6 transition-transform duration-300 ${
+      <aside className={`fixed left-0 top-0 h-full w-64 border-r border-slate-200 z-50 bg-slate-50 font-['Inter'] font-medium text-sm flex flex-col pt-0 pb-6 transition-transform duration-300 ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
-        {/* Mobile Header Close Button */}
-        <div className="flex md:hidden items-center justify-between px-6 mb-4">
-          <span className="font-bold text-slate-900 text-sm">Navigation Menu</span>
+        {/* Brand / App Logo Header Bar */}
+        <div className="flex items-center justify-between px-6 h-16 border-b border-slate-200 bg-white mb-6 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-sm">
+              U
+            </div>
+            <span className="font-extrabold text-slate-900 text-lg tracking-tight">Uzit</span>
+          </div>
           <button 
             onClick={() => setMobileOpen(false)}
-            className="p-1 rounded-lg text-slate-500 hover:bg-slate-200"
+            className="md:hidden p-1 rounded-lg text-slate-500 hover:bg-slate-100"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

@@ -4,6 +4,38 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useLocationContext } from '../context/LocationContext';
 import { supabase } from '../lib/supabaseClient';
+const ANCHOR_DATE = new Date(2025, 11, 14); // Dec 14, 2025
+
+const getCycleDayIndex = (dateObj) => {
+  const utcDate = Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  const utcAnchor = Date.UTC(ANCHOR_DATE.getFullYear(), ANCHOR_DATE.getMonth(), ANCHOR_DATE.getDate());
+  const diffDays = Math.round((utcDate - utcAnchor) / (1000 * 60 * 60 * 24));
+  return ((diffDays % 14) + 14) % 14;
+};
+
+const parsePattern = (pattern) => {
+  if (!pattern) return null;
+  if (Array.isArray(pattern)) return pattern;
+  if (typeof pattern === 'string') {
+    try {
+      const parsed = JSON.parse(pattern.replace('{', '[').replace('}', ']'));
+      if (Array.isArray(parsed)) return parsed;
+    } catch(e) {
+      const cleanStr = pattern.replace(/^\{|\}$|^\[|\]$/g, '');
+      return cleanStr.split(',').map(s => {
+        const t = s.trim();
+        if (t === 'true' || t === 't') return true;
+        if (t === 'false' || t === 'f') return false;
+        if (t === 'null' || t === 'undefined') return null;
+        return t.replace(/^"|"$/g, '');
+      });
+    }
+  }
+  if (typeof pattern === 'object' && !Array.isArray(pattern)) {
+    return Object.keys(pattern).sort((a,b)=>Number(a)-Number(b)).map(k => pattern[k]);
+  }
+  return null;
+};
 
 const formatDateRange = (startStr, endStr) => {
   if (!startStr) return '';
@@ -68,12 +100,13 @@ export default function ManagerDashboard() {
     setLoadingRequests(true);
 
     try {
-      const { data: clinicUsers } = await supabase
-        .from('employee_clinics')
-        .select('user_id')
-        .eq('clinic_id', selectedClinicId);
+      let clinicUsersQuery = supabase.from('employee_clinics').select('user_id');
+      if (selectedClinicId !== 'ALL') {
+        clinicUsersQuery = clinicUsersQuery.eq('clinic_id', selectedClinicId);
+      }
+      const { data: clinicUsers } = await clinicUsersQuery;
 
-      const userIds = (clinicUsers || []).map(cu => cu.user_id);
+      const userIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
       if (userIds.length === 0) {
         setPendingRequests([]);
         setLoadingRequests(false);
@@ -110,7 +143,7 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     fetchPendingRequests();
-  }, [selectedClinicId]);
+  }, [selectedClinicId, clinics]);
 
   const updateTimeOffRequestStatus = async (requestId, updates) => {
     const { error: updateErr } = await supabase
@@ -195,151 +228,156 @@ export default function ManagerDashboard() {
       if (!selectedClinicId) return;
       setLoading(true);
 
-      const curr = new Date();
-      const first = curr.getDate() - curr.getDay() + (weekOffset * 7); 
-      const Sunday = new Date(curr.setDate(first));
-      
-      const weekDates = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(Sunday);
-        d.setDate(Sunday.getDate() + i);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return {
-          date: d,
-          dateStr: `${y}-${m}-${day}`,
-          dayOfWeek: d.getDay(),
-          cycleIndex: i
-        };
-      });
-
-      const minDateStr = weekDates[0].dateStr;
-      const maxDateStr = weekDates[6].dateStr;
-
-      const { data: clinicUsers } = await supabase
-        .from('employee_clinics')
-        .select('user_id')
-        .eq('clinic_id', selectedClinicId);
-      
-      const userIds = (clinicUsers || []).map(cu => cu.user_id);
-
-      let profiles = [];
-      if (userIds.length > 0) {
-        const { data: profs } = await supabase
-          .from('employee_profiles')
-          .select(`
-            *,
-            users:user_id ( id, name )
-          `)
-          .in('user_id', userIds);
-        profiles = (profs || []).filter(p => {
-          const role = (p.staffing_role || p.job_title || '').toUpperCase();
-          return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
-        });
-      }
-
-      let timeOffs = [];
-      if (userIds.length > 0) {
-        const { data: offData } = await supabase
-          .from('time_off_requests')
-          .select('*')
-          .eq('status', 'approved')
-          .in('user_id', userIds)
-          .lte('start_date', maxDateStr)
-          .gte('end_date', minDateStr);
-        timeOffs = offData || [];
-      }
-
-      const { data: reqs } = await supabase
-        .from('coverage_requirements')
-        .select('*')
-        .eq('location_id', selectedClinicId);
-
-      let weeklyCoverage = [];
-      let rosterByDay = {};
-
-      weekDates.forEach((dayData, index) => {
-        let required = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
-        let actual = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
-        let workingStaff = [];
+      try {
+        const curr = new Date();
+        const first = curr.getDate() - curr.getDay() + (weekOffset * 7); 
+        const Sunday = new Date(curr.setDate(first));
         
-        (reqs || []).forEach(req => {
-          let pattern = req.schedule_pattern;
-          if (typeof pattern === 'string') {
-            try { pattern = JSON.parse(pattern.replace('{', '[').replace('}', ']')); } catch(e) {}
-          }
-          if (Array.isArray(pattern)) {
-            const dayVal = pattern[dayData.cycleIndex];
-            if (dayVal !== false && dayVal !== null && dayVal !== undefined) {
-              let role = req.staffing_role?.toUpperCase().trim() || 'OTHER';
-              if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
-              required[role] += (req.required_count || 1);
-              required.total += (req.required_count || 1);
-            }
-          }
+        const weekDates = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(Sunday);
+          d.setDate(Sunday.getDate() + i);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return {
+            date: d,
+            dateStr: `${y}-${m}-${day}`,
+            dayOfWeek: d.getDay(),
+            cycleIndex: getCycleDayIndex(d)
+          };
         });
 
-        profiles.forEach(prof => {
-          let pattern = prof.schedule_pattern;
-          if (typeof pattern === 'string') {
-            try { pattern = JSON.parse(pattern.replace('{', '[').replace('}', ']')); } catch(e) {}
-          }
-          if (Array.isArray(pattern)) {
-            const dayVal = pattern[dayData.cycleIndex];
-            if (dayVal !== false && dayVal !== null && dayVal !== undefined) {
-              const isOff = timeOffs.some(to => to.user_id === prof.user_id && to.start_date <= dayData.dateStr && to.end_date >= dayData.dateStr);
-              
-              let role = prof.staffing_role?.toUpperCase().trim() || 'OTHER';
-              if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
-              
-              const effectiveShiftTime = typeof dayVal === 'string' ? dayVal : prof.shift_time;
+        const minDateStr = weekDates[0].dateStr;
+        const maxDateStr = weekDates[6].dateStr;
 
-              workingStaff.push({
-                ...prof,
-                effectiveShiftTime,
-                isOff,
-                status: isOff ? 'Offsite' : 'Onsite'
-              });
-            
-              if (!isOff) {
-                actual[role] += 1;
-                actual.total += 1;
+        let clinicUsersQuery = supabase.from('employee_clinics').select('user_id');
+        if (selectedClinicId !== 'ALL') {
+          clinicUsersQuery = clinicUsersQuery.eq('clinic_id', selectedClinicId);
+        }
+        const { data: clinicUsers } = await clinicUsersQuery;
+        
+        const userIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
+
+        let profiles = [];
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase
+            .from('employee_profiles')
+            .select(`
+              *,
+              users:user_id ( id, name )
+            `)
+            .in('user_id', userIds);
+          profiles = (profs || []).filter(p => {
+            const role = (p.staffing_role || p.job_title || '').toUpperCase();
+            return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
+          });
+        }
+
+        let timeOffs = [];
+        if (userIds.length > 0) {
+          const { data: offData } = await supabase
+            .from('time_off_requests')
+            .select('*')
+            .eq('status', 'approved')
+            .in('user_id', userIds)
+            .lte('start_date', maxDateStr)
+            .gte('end_date', minDateStr);
+          timeOffs = offData || [];
+        }
+
+        let reqsQuery = supabase.from('coverage_requirements').select('*');
+        if (selectedClinicId !== 'ALL') {
+          reqsQuery = reqsQuery.eq('location_id', selectedClinicId);
+        }
+        const { data: reqs } = await reqsQuery;
+
+        let weeklyCoverage = [];
+        let rosterByDay = {};
+
+        weekDates.forEach((dayData, index) => {
+          let required = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
+          let actual = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
+          let workingStaff = [];
+          
+          (reqs || []).forEach(req => {
+            let pattern = parsePattern(req.schedule_pattern);
+            if (pattern && pattern.length === 14) {
+              const dayVal = pattern[dayData.cycleIndex];
+              if (dayVal !== false && dayVal !== null && dayVal !== undefined) {
+                let role = req.staffing_role?.toUpperCase().trim() || 'OTHER';
+                if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
+                required[role] += (req.required_count || 1);
+                required.total += (req.required_count || 1);
               }
             }
-          }
-        });
-        
-        const gap = required.RN > actual.RN || required.LVN > actual.LVN || required.MA > actual.MA;
-        
-        weeklyCoverage.push({
-          date: dayData.date,
-          dateStr: dayData.dateStr,
-          required,
-          actual,
-          gap
-        });
-        
-        workingStaff.sort((a, b) => {
-          if (a.isOff !== b.isOff) return a.isOff ? 1 : -1;
-          const nameA = a.users?.name || '';
-          const nameB = b.users?.name || '';
-          return nameA.localeCompare(nameB);
-        });
-        
-        rosterByDay[index] = workingStaff;
-      });
+          });
 
-      setDashboardData({
-        weeklyCoverage,
-        rosterByDay
-      });
-      
-      setLoading(false);
+          profiles.forEach(prof => {
+            let pattern = parsePattern(prof.schedule_pattern);
+            if (pattern && pattern.length === 14) {
+              const dayVal = pattern[dayData.cycleIndex];
+              if (dayVal !== false && dayVal !== null && dayVal !== undefined) {
+                const isFullOff = timeOffs.some(to => to.user_id === prof.user_id && to.start_date <= dayData.dateStr && to.end_date >= dayData.dateStr && !to.start_time && !to.end_time);
+                const partialOff = timeOffs.find(to => to.user_id === prof.user_id && to.start_date <= dayData.dateStr && to.end_date >= dayData.dateStr && (to.start_time || to.end_time));
+                
+                let role = prof.staffing_role?.toUpperCase().trim() || 'OTHER';
+                if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
+                
+                const effectiveShiftTime = typeof dayVal === 'string' ? dayVal : prof.shift_time;
+
+                workingStaff.push({
+                  ...prof,
+                  effectiveShiftTime,
+                  isOff: isFullOff,
+                  isPartialOff: !!partialOff,
+                  partialOffDetails: partialOff,
+                  status: isFullOff ? 'Offsite' : partialOff ? 'Partial Leave' : 'Onsite'
+                });
+              
+                if (!isFullOff) {
+                  actual[role] += 1;
+                  actual.total += 1;
+                }
+              }
+            }
+          });
+          
+          const gap = required.RN > actual.RN || required.LVN > actual.LVN || required.MA > actual.MA;
+          
+          weeklyCoverage.push({
+            date: dayData.date,
+            dateStr: dayData.dateStr,
+            required,
+            actual,
+            gap
+          });
+          
+          workingStaff.sort((a, b) => {
+            if (a.isOff !== b.isOff) return a.isOff ? 1 : -1;
+            const nameA = a.users?.name || '';
+            const nameB = b.users?.name || '';
+            return nameA.localeCompare(nameB);
+          });
+          
+          rosterByDay[index] = workingStaff;
+        });
+
+        setDashboardData({
+          weeklyCoverage,
+          rosterByDay
+        });
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchData();
   }, [selectedClinicId, weekOffset]);
 
-  const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'Loading Clinic...';
+  const clinicName = selectedClinicId === 'ALL'
+    ? 'All Clinics'
+    : clinics.find(c => c.id === selectedClinicId)?.name || 'Loading Clinic...';
   const currentRoster = dashboardData.rosterByDay[selectedDayIndex] || [];
   const selectedDate = dashboardData.weeklyCoverage?.[selectedDayIndex]?.date;
   
@@ -350,6 +388,45 @@ export default function ManagerDashboard() {
   const filteredRoster = selectedRoleFilter === 'All Staff' 
     ? currentRoster 
     : currentRoster.filter(s => s.staffing_role === selectedRoleFilter);
+
+  const handlePrevDay = () => {
+    if (selectedDayIndex > 0) {
+      setSelectedDayIndex(prev => prev - 1);
+    } else {
+      setWeekOffset(w => w - 1);
+      setSelectedDayIndex(6);
+    }
+  };
+
+  const handleNextDay = () => {
+    if (selectedDayIndex < 6) {
+      setSelectedDayIndex(prev => prev + 1);
+    } else {
+      setWeekOffset(w => w + 1);
+      setSelectedDayIndex(0);
+    }
+  };
+
+  const handleDateChange = (e) => {
+    if (!e.target.value) return;
+    const [y, m, d] = e.target.value.split('-').map(Number);
+    const targetDate = new Date(y, m - 1, d);
+    
+    const today = new Date();
+    const todaySun = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+    const targetSun = new Date(y, m - 1, d - targetDate.getDay());
+    
+    const diffTime = targetSun.getTime() - todaySun.getTime();
+    const diffWeeks = Math.round(diffTime / (1000 * 60 * 60 * 24 * 7));
+    
+    setWeekOffset(diffWeeks);
+    setSelectedDayIndex(targetDate.getDay());
+  };
+
+  const selectedDateObj = dashboardData.weeklyCoverage?.[selectedDayIndex]?.date;
+  const selectedDateValueStr = selectedDateObj 
+    ? `${selectedDateObj.getFullYear()}-${String(selectedDateObj.getMonth() + 1).padStart(2, '0')}-${String(selectedDateObj.getDate()).padStart(2, '0')}`
+    : '';
 
   return (
     <Layout>
@@ -399,16 +476,45 @@ export default function ManagerDashboard() {
 
         {/* 1. Daily Health Stats (Clinic Health for Selected Day) */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
               <span className="material-symbols-outlined text-blue-600 text-xl">analytics</span>
               Clinic Health for the Day
             </h2>
-            {dashboardData.weeklyCoverage?.[selectedDayIndex]?.date && (
-              <span className="text-xs font-semibold text-slate-500 hidden sm:inline">
-                {dashboardData.weeklyCoverage[selectedDayIndex].date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-              </span>
-            )}
+            
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handlePrevDay} 
+                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 bg-white"
+                title="Previous Day"
+              >
+                <span className="material-symbols-outlined text-lg leading-none block">chevron_left</span>
+              </button>
+
+              <div className="relative flex items-center bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-semibold text-xs px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm">
+                <span className="material-symbols-outlined text-base mr-1.5 text-blue-600">calendar_today</span>
+                <span>
+                  {selectedDateObj 
+                    ? selectedDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) 
+                    : 'Select Date'}
+                </span>
+                <span className="material-symbols-outlined text-sm ml-1 text-slate-400">arrow_drop_down</span>
+                <input 
+                  type="date" 
+                  value={selectedDateValueStr}
+                  onChange={handleDateChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+              </div>
+
+              <button 
+                onClick={handleNextDay} 
+                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 bg-white"
+                title="Next Day"
+              >
+                <span className="material-symbols-outlined text-lg leading-none block">chevron_right</span>
+              </button>
+            </div>
           </div>
 
           {/* Day Selector Pill Row */}
@@ -808,6 +914,10 @@ export default function ManagerDashboard() {
                         {staff.isOff ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
                             Offsite
+                          </span>
+                        ) : staff.isPartialOff ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200" title={staff.partialOffDetails?.start_time ? `Partial Leave: ${formatTimeRange(staff.partialOffDetails.start_time, staff.partialOffDetails.end_time)}` : 'Partial Leave'}>
+                            Partial Leave
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">

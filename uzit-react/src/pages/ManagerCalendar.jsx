@@ -3,7 +3,15 @@ import Layout from '../components/Layout';
 import { useLocationContext } from '../context/LocationContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import SearchableSelect from '../components/SearchableSelect';
+const formatTimeStr = (t) => {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  let hour = parseInt(h, 10);
+  if (isNaN(hour)) return t;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${m || '00'} ${ampm}`;
+};
 
 export default function ManagerCalendar() {
   const { clinics, selectedClinicId, setSelectedClinicId } = useLocationContext();
@@ -459,6 +467,8 @@ export default function ManagerCalendar() {
           type: to.time_off_type_code,
           start_date: to.start_date,
           end_date: to.end_date,
+          start_time: to.start_time,
+          end_time: to.end_time,
           status: to.status,
           reason: to.reason,
           manager_note: to.manager_note,
@@ -548,10 +558,10 @@ export default function ManagerCalendar() {
     if (!date) return [];
     const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-    // 1. Get user IDs of staff on approved time off on this date
+    // 1. Get user IDs of staff on approved FULL-DAY time off on this date (partial-day staff remain working)
     const approvedOffUserIds = new Set(
       timeOffs
-        .filter(to => to.status === 'approved' && to.start_date <= dateStr && to.end_date >= dateStr)
+        .filter(to => to.status === 'approved' && to.start_date <= dateStr && to.end_date >= dateStr && !to.start_time && !to.end_time)
         .map(to => to.user_id)
     );
 
@@ -808,12 +818,14 @@ export default function ManagerCalendar() {
                                     e.stopPropagation();
                                     setActiveTimeOffPopover(activeTimeOffPopover === staff.id ? null : staff.id);
                                   }}
-                                  title={`${staff.name} - ${staff.type} (${staff.status?.toUpperCase() || 'PENDING'})`}
+                                  title={`${staff.name} - ${staff.type}${staff.start_time || staff.end_time ? ` (${staff.start_time.slice(0,5)} - ${staff.end_time.slice(0,5)})` : ''} (${staff.status?.toUpperCase() || 'PENDING'})`}
                                 >
                                   <span className="font-semibold truncate mr-2">{staff.name}</span>
                                   <div className="flex items-center gap-1 flex-shrink-0">
                                     <span className="text-[9px] font-bold opacity-75 bg-black/10 px-1 rounded uppercase">
-                                      {staff.type || 'VAC'}
+                                      {staff.start_time || staff.end_time 
+                                        ? `${staff.type || 'VAC'} (${staff.start_time.slice(0,5)}-${staff.end_time.slice(0,5)})`
+                                        : (staff.type || 'VAC')}
                                     </span>
                                     {isApproved && (
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Approved"></span>
@@ -832,7 +844,10 @@ export default function ManagerCalendar() {
                                       <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
                                         <div className="truncate pr-1">
                                           <p className="font-bold text-xs text-slate-900 truncate">{staff.name}</p>
-                                          <p className="text-[10px] text-slate-500 font-medium truncate">{staff.type || 'Time Off'}</p>
+                                          <p className="text-[10px] text-slate-500 font-medium truncate">
+                                            {staff.type || 'Time Off'}
+                                            {(staff.start_time || staff.end_time) && ` (${staff.start_time.slice(0,5)} - ${staff.end_time.slice(0,5)})`}
+                                          </p>
                                         </div>
                                         <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase shrink-0 ${
                                           staff.status === 'approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
@@ -1375,12 +1390,31 @@ export default function ManagerCalendar() {
 
                 {/* Details Section */}
                 <div className="space-y-4 pt-2 border-t border-slate-100">
-                  <div>
-                    <p className="text-slate-500 font-bold mb-1 uppercase tracking-wider text-[10px]">Date Range</p>
-                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs">
-                      <span className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">{selectedTimeOffForDetails.start_date}</span>
-                      <span className="text-slate-400">to</span>
-                      <span className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">{selectedTimeOffForDetails.end_date}</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-slate-500 font-bold mb-1 uppercase tracking-wider text-[10px]">Date Range</p>
+                      <div className="flex items-center gap-1.5 text-slate-900 font-semibold text-xs">
+                        <span className="bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">{selectedTimeOffForDetails.start_date}</span>
+                        <span className="text-slate-400">to</span>
+                        <span className="bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">{selectedTimeOffForDetails.end_date}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-slate-500 font-bold mb-1 uppercase tracking-wider text-[10px]">Time / Hours</p>
+                      <div className="text-slate-900 font-semibold text-xs">
+                        {selectedTimeOffForDetails.start_time || selectedTimeOffForDetails.end_time ? (
+                          <span className="bg-amber-50 text-amber-900 border border-amber-200 px-2 py-1 rounded-md inline-flex items-center gap-1 font-bold">
+                            <span className="material-symbols-outlined text-xs text-amber-600">schedule</span>
+                            {formatTimeStr(selectedTimeOffForDetails.start_time)} - {formatTimeStr(selectedTimeOffForDetails.end_time)}
+                          </span>
+                        ) : (
+                          <span className="bg-slate-50 border border-slate-200 px-2 py-1 rounded-md inline-flex items-center gap-1 text-slate-700">
+                            <span className="material-symbols-outlined text-xs text-slate-400">wb_sunny</span>
+                            Full Day
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

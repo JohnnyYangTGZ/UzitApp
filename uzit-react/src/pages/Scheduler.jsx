@@ -310,6 +310,61 @@ const CoverageCell = ({
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  const getActualWorkingTimeStr = (emp, defaultShiftTime) => {
+    let sMin = null;
+    let eMin = null;
+
+    if (emp.custom_start_time && emp.custom_end_time) {
+      sMin = timeToMinutes(emp.custom_start_time);
+      eMin = timeToMinutes(emp.custom_end_time);
+    } else if (defaultShiftTime && defaultShiftTime.includes('-')) {
+      const [s, e] = defaultShiftTime.split('-');
+      sMin = timeToMinutes(s);
+      eMin = timeToMinutes(e);
+    }
+
+    if (sMin === null || eMin === null) return null;
+
+    if (!emp.partialTimeOffs || emp.partialTimeOffs.length === 0) {
+      if (emp.custom_start_time || emp.custom_end_time) {
+        return `${formatMinutesToTime(sMin)} - ${formatMinutesToTime(eMin)}`;
+      }
+      return null;
+    }
+
+    let workingIntervals = [{ start: sMin, end: eMin }];
+
+    emp.partialTimeOffs.forEach(pt => {
+      const ptStart = timeToMinutes(pt.start_time);
+      const ptEnd = timeToMinutes(pt.end_time);
+
+      const nextIntervals = [];
+      workingIntervals.forEach(interval => {
+        if (ptEnd <= interval.start || ptStart >= interval.end) {
+          nextIntervals.push(interval);
+        } else {
+          if (ptStart > interval.start) {
+            if (ptStart - interval.start > 30) {
+              nextIntervals.push({ start: interval.start, end: ptStart });
+            }
+          }
+          if (ptEnd < interval.end) {
+            if (interval.end - ptEnd > 30) {
+              nextIntervals.push({ start: ptEnd, end: interval.end });
+            }
+          }
+        }
+      });
+      workingIntervals = nextIntervals;
+    });
+
+    if (workingIntervals.length === 0) return 'Off';
+
+    return workingIntervals
+      .map(inv => `${formatMinutesToTime(inv.start)} - ${formatMinutesToTime(inv.end)}`)
+      .join(', ');
+  };
+
   const uncoveredIntervals = [];
   if (shiftTime && shiftTime.includes('-')) {
     const [shiftStartStr, shiftEndStr] = shiftTime.split('-');
@@ -576,11 +631,17 @@ const CoverageCell = ({
                   <span className={`font-semibold text-xs truncate ${isPartial ? 'text-amber-800' : 'text-slate-700'}`} title={emp.users?.name}>
                     {emp.users?.name}
                   </span>
-                  {(emp.custom_start_time || emp.custom_end_time) && (
-                    <span className="text-[9px] font-bold text-slate-500 whitespace-nowrap">
-                      {formatTime(emp.custom_start_time)} - {formatTime(emp.custom_end_time)}
-                    </span>
-                  )}
+                  {(() => {
+                    const workingTimeStr = getActualWorkingTimeStr(emp, shiftTime);
+                    if (workingTimeStr) {
+                      return (
+                        <span className={`text-[9px] font-bold whitespace-nowrap ${isPartial ? 'text-amber-900' : 'text-slate-500'}`}>
+                          {workingTimeStr}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
                 <button
                   type="button"
@@ -1501,7 +1562,7 @@ export default function Scheduler() {
       // Update employee isActive state for this day
       currentEmployees.forEach(emp => {
         const dateStr = dateObj.toISOString().split('T')[0];
-        const fullTimeOffs = timeOffData.filter(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+        const fullTimeOffs = timeOffData.filter(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
         const hasFullTimeOff = fullTimeOffs.length > 0;
 
         let pattern = parsePattern(emp.schedule_pattern);

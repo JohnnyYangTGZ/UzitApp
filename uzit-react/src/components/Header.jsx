@@ -27,8 +27,8 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 w-full h-16 z-40 border-b border-slate-200 bg-white flex items-center justify-between px-3 md:px-6 font-['Inter'] text-sm tracking-tight">
-      <div className="flex items-center gap-2 md:gap-8 min-w-0 flex-1 md:flex-none md:w-64">
+    <header className="fixed top-0 w-full h-16 z-40 border-b border-slate-200 bg-white flex items-center justify-between px-3 md:px-6 md:pl-72 font-['Inter'] text-sm tracking-tight">
+      <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1 md:flex-none">
         {/* Mobile Sidebar Toggle Button */}
         <button 
           onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
@@ -38,19 +38,22 @@ export default function Header() {
           <span className="material-symbols-outlined text-2xl">menu</span>
         </button>
 
-        {loadingDepartments ? (
-          <div className="text-slate-500 text-xs">Loading...</div>
-        ) : (
-          <select 
-            value={selectedDepartmentId}
-            onChange={(e) => setSelectedDepartmentId(e.target.value)}
-            className="w-full max-w-[180px] md:max-w-none bg-white border border-slate-200 text-slate-900 font-bold py-1.5 md:py-2 px-2.5 md:px-3 rounded-lg focus:ring-2 focus:ring-primary outline-none shadow-sm text-xs md:text-sm truncate"
-          >
-            {departments.map(dept => (
-              <option key={dept.id} value={dept.id}>{dept.name}</option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Department:</span>
+          {loadingDepartments ? (
+            <div className="text-slate-500 text-xs">Loading...</div>
+          ) : (
+            <select 
+              value={selectedDepartmentId}
+              onChange={(e) => setSelectedDepartmentId(e.target.value)}
+              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-900 font-bold py-1.5 md:py-2 px-3 rounded-lg focus:ring-2 focus:ring-primary outline-none shadow-xs text-xs md:text-sm cursor-pointer transition-colors"
+            >
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
       
       <div className="flex items-center gap-2 md:gap-4 shrink-0">
