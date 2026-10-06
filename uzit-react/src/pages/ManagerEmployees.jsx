@@ -3,12 +3,14 @@ import Layout from '../components/Layout';
 import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
 import { useScheduleData } from '../hooks/useScheduleData';
+import AttendanceCalendarModal from '../components/AttendanceCalendarModal';
 
 export default function ManagerEmployees() {
   const { selectedDepartmentId, clinics } = useLocationContext();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
@@ -365,7 +367,16 @@ export default function ManagerEmployees() {
                       <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">calendar_today</span> Seniority: {selectedEmployee?.seniority_date ? new Date(selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'N/A'}</span>
                     </div>
                   </div>
-                  <div className="text-right relative">
+                  <div className="text-right flex items-center gap-2 relative">
+                    <button 
+                      onClick={() => setIsAttendanceModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20 text-white"
+                      title="View & Print 12-Month Attendance Calendar"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                      <span className="text-sm font-semibold">Attendance Calendar</span>
+                    </button>
+                    
                     <button 
                       onClick={() => setShowAbsenceForm(!showAbsenceForm)}
                       className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20 text-white"
@@ -648,6 +659,12 @@ export default function ManagerEmployees() {
 
         </div>
       </div>
+
+      <AttendanceCalendarModal
+        isOpen={isAttendanceModalOpen}
+        onClose={() => setIsAttendanceModalOpen(false)}
+        employee={selectedEmployee}
+      />
     </Layout>
   );
 }
