@@ -21,7 +21,15 @@ export default function StaffDashboard() {
     setLoading(true);
 
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const formatLocalDateStr = (d = new Date()) => {
+        if (!d) return '';
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const todayStr = formatLocalDateStr(new Date());
       
       // Fetch shifts
       const { data: assignments } = await supabase
@@ -94,10 +102,11 @@ export default function StaffDashboard() {
       }
 
       let foundUpcoming = null;
+      const todayDate = new Date();
       for (let i = 0; i < 30; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const d = new Date(todayDate);
+        d.setDate(todayDate.getDate() + i);
+        const dateStr = formatLocalDateStr(d);
         
         if (manualAssignmentsMap[dateStr]) {
            foundUpcoming = manualAssignmentsMap[dateStr];

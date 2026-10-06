@@ -15,6 +15,14 @@ export default function ManagerEmployees() {
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
   
+  const formatLocalDateStr = (d = new Date()) => {
+    if (!d) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Real data states
   const { fetchMySchedule } = useScheduleData();
   const [shifts, setShifts] = useState([]);
@@ -25,7 +33,7 @@ export default function ManagerEmployees() {
   // Absence Form State
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [absenceType, setAbsenceType] = useState('Sick Call');
-  const [absenceDate, setAbsenceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [absenceDate, setAbsenceDate] = useState(() => formatLocalDateStr(new Date()));
   const [absenceNotes, setAbsenceNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -156,10 +164,10 @@ export default function ManagerEmployees() {
 
     const loadEmployeeData = async () => {
       const today = new Date();
-      const startDateStr = today.toISOString().split('T')[0];
+      const startDateStr = formatLocalDateStr(today);
       const endDate = new Date(today);
       endDate.setDate(today.getDate() + 13);
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const endDateStr = formatLocalDateStr(endDate);
       
       // Fetch shifts for next 14 days
       const shiftsData = await fetchMySchedule(selectedEmployee.user_id, startDateStr, endDateStr);
@@ -256,10 +264,11 @@ export default function ManagerEmployees() {
   // Helper to generate next 14 days
   const getNext14Days = () => {
     const days = [];
+    const today = new Date();
     for (let i = 0; i < 14; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const dateStr = formatLocalDateStr(date);
       
       // Check if scheduled
       const isWorking = shifts.some(s => s.shifts?.date === dateStr);
