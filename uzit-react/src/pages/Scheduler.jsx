@@ -725,9 +725,60 @@ export default function Scheduler() {
   const [employeeAssignments, setEmployeeAssignments] = useState({});
   const [weekDates, setWeekDates] = useState([]);
   const [weeklyTimeOffData, setWeeklyTimeOffData] = useState([]);
+  const [weeklyAvailabilityData, setWeeklyAvailabilityData] = useState([]);
+  const [activeAvailPopoverDate, setActiveAvailPopoverDate] = useState(null);
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
   const [mobileDayIdx, setMobileDayIdx] = useState(0);
+
+  const getDayAvailabilityInfo = (dateStr) => {
+    if (!dateStr || !weeklyAvailabilityData) return { total: 0, assigned: 0, list: [] };
+
+    const dayAvails = weeklyAvailabilityData.filter(a => a.date === dateStr);
+    if (dayAvails.length === 0) return { total: 0, assigned: 0, list: [] };
+
+    const list = dayAvails.map(avail => {
+      const emp = employees.find(e => e.user_id === avail.user_id || e.id === avail.user_id);
+      const empName = emp?.name || emp?.users?.name || 'Employee';
+      const empRole = emp?.staffing_role || emp?.job_title || 'Staff';
+      
+      let isAssigned = false;
+      let assignedShiftName = '';
+
+      const dayIdx = weekDates.findIndex(d => formatLocalDate(d) === dateStr);
+      if (dayIdx !== -1) {
+        Object.keys(weeklyAssignments).forEach(shiftId => {
+          const shiftObj = shifts.find(s => s.id === shiftId);
+          const dayAssignment = weeklyAssignments[shiftId]?.[dayIdx];
+          if (dayAssignment && dayAssignment.employees) {
+            const match = dayAssignment.employees.find(e => (e.user_id || e.id) === avail.user_id);
+            if (match) {
+              isAssigned = true;
+              assignedShiftName = shiftObj?.custom_id || shiftObj?.time_block || 'Shift';
+            }
+          }
+        });
+      }
+
+      return {
+        userId: avail.user_id,
+        empName,
+        empRole,
+        shiftTime: avail.shift_time || 'Any Time',
+        notes: avail.notes || '',
+        isAssigned,
+        assignedShiftName,
+        empObj: emp
+      };
+    });
+
+    const assignedCount = list.filter(item => item.isAssigned).length;
+    return {
+      total: list.length,
+      assigned: assignedCount,
+      list
+    };
+  };
 
   useEffect(() => {
     if (selectedDate && weekDates.length === 7) {
@@ -1529,6 +1580,7 @@ export default function Scheduler() {
 
   function calculateAssignments(currentShifts, currentEmployees, currentWeekDates, timeOffData = [], templateOverrides = {}, availabilityData = []) {
     setWeekDates(currentWeekDates);
+    setWeeklyAvailabilityData(availabilityData || []);
 
     const sortedShifts = [...currentShifts].sort((a, b) => {
       const aId = (a.custom_id || '').toUpperCase();
@@ -2090,14 +2142,106 @@ export default function Scheduler() {
                   <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                     <tr>
                       <th className="p-4 font-label-sm text-label-sm text-slate-500 uppercase tracking-wider w-64 bg-slate-50 border-r border-slate-200 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Shift</th>
-                      {weekDates.map((dateObj, i) => (
-                        <th key={i} className="p-4 border-r border-slate-100 min-w-[180px]">
-                          <div className="flex flex-col">
-                            <span className="text-slate-900 font-bold">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}</span>
-                            <span className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wider">{getCycleDayLabel(getCycleDayIndex(dateObj))}</span>
-                          </div>
-                        </th>
-                      ))}
+                      {weekDates.map((dateObj, i) => {
+                        const dateStr = formatLocalDate(dateObj);
+                        const dayAvailInfo = getDayAvailabilityInfo(dateStr);
+
+                        return (
+                          <th key={i} className="p-3 border-r border-slate-100 min-w-[190px] relative">
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex flex-col">
+                                <span className="text-slate-900 font-bold leading-tight">
+                                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()]} {dateObj.getMonth() + 1}/{dateObj.getDate()}
+                                </span>
+                                <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider mt-0.5">
+                                  {getCycleDayLabel(getCycleDayIndex(dateObj))}
+                                </span>
+                              </div>
+
+                              {dayAvailInfo.total > 0 && (
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveAvailPopoverDate(activeAvailPopoverDate === dateStr ? null : dateStr);
+                                    }}
+                                    className={`px-2 py-0.5 rounded-full text-xs font-black flex items-center gap-1 transition-all border shadow-2xs ${
+                                      dayAvailInfo.assigned === dayAvailInfo.total
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                                        : 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 animate-pulse'
+                                    }`}
+                                    title={`${dayAvailInfo.assigned} of ${dayAvailInfo.total} available staff assigned. Click to view available staff.`}
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      {dayAvailInfo.assigned === dayAvailInfo.total ? 'check_circle' : 'person'}
+                                    </span>
+                                    <span>({dayAvailInfo.assigned}/{dayAvailInfo.total})</span>
+                                  </button>
+
+                                  {/* Available Staff Dropdown Popover */}
+                                  {activeAvailPopoverDate === dateStr && (
+                                    <div className="absolute right-0 top-8 w-72 bg-white border border-slate-200 shadow-2xl rounded-xl overflow-hidden z-40 text-left font-sans normal-case">
+                                      <div className="bg-slate-900 text-white p-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 font-bold text-xs">
+                                          <span className="material-symbols-outlined text-amber-400 text-base">person</span>
+                                          <span>Available Staff ({dateObj.getMonth() + 1}/{dateObj.getDate()})</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveAvailPopoverDate(null);
+                                          }}
+                                          className="text-slate-400 hover:text-white"
+                                        >
+                                          <span className="material-symbols-outlined text-base">close</span>
+                                        </button>
+                                      </div>
+
+                                      <div className="p-2 divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                                        {dayAvailInfo.list.map((item, idx) => (
+                                          <div key={idx} className="py-2.5 px-2 flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold text-[10px] flex items-center justify-center uppercase">
+                                                  {item.empName.charAt(0)}
+                                                </div>
+                                                <div>
+                                                  <p className="font-bold text-xs text-slate-800 leading-none">{item.empName}</p>
+                                                  <p className="text-[10px] text-slate-500 font-semibold uppercase">{item.empRole}</p>
+                                                </div>
+                                              </div>
+
+                                              {item.isAssigned ? (
+                                                <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded border border-emerald-300">
+                                                  Assigned
+                                                </span>
+                                              ) : (
+                                                <span className="bg-amber-100 text-amber-900 text-[9px] font-extrabold px-2 py-0.5 rounded border border-amber-300">
+                                                  Available
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            <div className="text-[10px] text-slate-600 bg-slate-50 p-2 rounded border border-slate-100 space-y-1">
+                                              <p><strong className="text-slate-700">Available Window:</strong> {item.shiftTime}</p>
+                                              {item.notes && <p className="italic text-slate-500">"{item.notes}"</p>}
+                                              {item.isAssigned && (
+                                                <p className="text-emerald-700 font-bold">Assigned Shift: {item.assignedShiftName}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">

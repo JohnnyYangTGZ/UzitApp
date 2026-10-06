@@ -127,6 +127,24 @@ export default function StaffSchedule() {
     return getShiftPublicationInfo(assignment).published;
   };
 
+  const [availabilities, setAvailabilities] = useState([]);
+
+  const fetchAvailabilities = async () => {
+    if (!user) return;
+    const startDateStr = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(monthEnd.getFullYear(), monthEnd.getMonth() + 1, 0).getDate();
+    const endDateStr = `${monthEnd.getFullYear()}-${String(monthEnd.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const { data } = await supabase
+      .from('employee_availability')
+      .select('*')
+      .eq('user_id', user.id)
+      .lte('date', endDateStr)
+      .gte('date', startDateStr);
+    
+    setAvailabilities(data || []);
+  };
+
   const fetchTimeOffs = async () => {
     if (!user) return;
     const startDateStr = monthStart.toISOString().split('T')[0];
@@ -152,6 +170,7 @@ export default function StaffSchedule() {
     });
     
     fetchTimeOffs();
+    fetchAvailabilities();
     fetchPublications();
     fetchUsers();
     fetchAuditLogs();
@@ -199,23 +218,30 @@ export default function StaffSchedule() {
 
     let d = new Date(startDate);
     while (d <= endDate) {
-      const dateStr = d.toISOString().split('T')[0];
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${dayNum}`;
+
       // Find all shift assignments for this day
       const dayShifts = shifts.filter(a => a.shifts?.date === dateStr);
       // Find all time offs for this day
       const dayTimeOffs = timeOffs.filter(to => to.start_date <= dateStr && to.end_date >= dateStr);
+      // Find availabilities for this day
+      const dayAvailabilities = availabilities.filter(a => a.date === dateStr);
       
       days.push({
         date: new Date(d),
         dateStr,
         isCurrentMonth: d.getMonth() === currentDate.getMonth(),
         shifts: dayShifts,
-        timeOffs: dayTimeOffs
+        timeOffs: dayTimeOffs,
+        availabilities: dayAvailabilities
       });
       d.setDate(d.getDate() + 1);
     }
     return days;
-  }, [currentDate, shifts, timeOffs]);
+  }, [currentDate, monthStart, monthEnd, shifts, timeOffs, availabilities]);
 
   const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
@@ -471,7 +497,28 @@ export default function StaffSchedule() {
                               );
                             })}
 
-                            {day.isCurrentMonth && !hasApprovedPTO && day.shifts.length === 0 && day.timeOffs.length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
+                            {day.shifts.length === 0 && day.timeOffs.length === 0 && (day.availabilities || []).map((avail, idx) => (
+                              <div 
+                                key={`avail-${idx}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedDayDetails(day);
+                                }}
+                                className="p-1.5 rounded-md text-xs font-semibold bg-blue-600 text-white border border-blue-500 hover:bg-blue-700 shadow-2xs cursor-pointer flex flex-col justify-between"
+                                title={`Submitted Availability: ${avail.shift_time || 'Any'}`}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[13px]">event_available</span>
+                                    <span className="font-black text-[11px] uppercase tracking-tight">Available</span>
+                                  </div>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-300"></span>
+                                </div>
+                                <p className="text-blue-100 text-[10px] font-mono mt-0.5">{avail.shift_time || 'Any Time'}</p>
+                              </div>
+                            ))}
+
+                            {day.isCurrentMonth && !hasApprovedPTO && day.shifts.length === 0 && day.timeOffs.length === 0 && (day.availabilities || []).length === 0 && day.date.getDay() !== 0 && day.date.getDay() !== 6 && (
                               <div className="mt-1 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-200">
                                 Off
                               </div>
