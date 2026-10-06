@@ -856,8 +856,8 @@ export default function Scheduler() {
             const empVal = empPattern[cycleDayIndex];
             if (empVal === false || empVal === null || empVal === undefined) return false;
 
-            // Must not be on approved time off on this date
-            const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+            // Must not be on approved full-day time off on this date
+            const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
             if (isOnPTO) return false;
 
             // Shift time matching
@@ -1129,7 +1129,7 @@ export default function Scheduler() {
     let count = 0;
     weekDates.forEach(dateObj => {
       const dateStr = formatLocalDate(dateObj);
-      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr);
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
       if (!isOnPTO) {
         const idx = getCycleDayIndex(dateObj);
         const val = pattern[idx];
@@ -1170,7 +1170,7 @@ export default function Scheduler() {
     const pattern = parsePattern(emp.schedule_pattern);
     if (!pattern || pattern.length !== 14) return false;
     if (selectedDate) {
-      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= selectedDate && t.end_date >= selectedDate);
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === emp.user_id && t.start_date <= selectedDate && t.end_date >= selectedDate && !t.start_time && !t.end_time);
       if (isOnPTO) return false;
     }
     const dayVal = pattern[currentCycleDayIndex];
@@ -1277,9 +1277,9 @@ export default function Scheduler() {
       const assignedEmp = employees.find(e => e.user_id === userId);
       const empName = assignedEmp?.users?.name || 'Staff';
 
-      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === userId && t.start_date <= dateStr && t.end_date >= dateStr);
+      const isOnPTO = weeklyTimeOffData.some(t => t.user_id === userId && t.start_date <= dateStr && t.end_date >= dateStr && !t.start_time && !t.end_time);
       if (isOnPTO) {
-        showToastNotification(`Cannot assign ${empName}: Employee has approved time off on ${dateStr}.`, 'error');
+        showToastNotification(`Cannot assign ${empName}: Employee has approved full-day time off on ${dateStr}.`, 'error');
         return;
       }
 
