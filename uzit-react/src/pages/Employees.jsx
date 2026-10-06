@@ -594,206 +594,148 @@ export default function Employees() {
 
           {/* Datacard Area (Right) */}
           <div className={`transition-all duration-300 ease-in-out flex-shrink-0 ${
-            (isEditing || isCreating) ? 'w-full md:w-[680px] xl:w-[760px]' : 'w-full md:w-[420px]'
+            (isEditing || isCreating) ? 'w-full md:w-[860px] xl:w-[940px]' : 'w-full md:w-[420px]'
           }`}>
             {selectedEmployee || isCreating ? (() => {
               const accruals = getAccrualInfo(selectedEmployee);
               return (
               <div className="bg-white border border-surface-border rounded-xl shadow-md h-full flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300">
-                {/* Datacard Header */}
-                <div className="bg-slate-50 p-6 border-b border-slate-200 flex flex-col items-center text-center">
-                  <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-3xl mb-4 border-4 border-white shadow-sm uppercase">
-                    {isCreating ? '?' : selectedEmployee?.users?.name?.charAt(0) || '?'}
-                  </div>
-                  {isEditing ? (
-                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">First Name *</label>
-                        <input 
-                          type="text" 
-                          value={editForm.firstName} 
-                          onChange={e => {
-                            setEditForm({...editForm, firstName: e.target.value});
-                            if (formErrors.firstName) setFormErrors({...formErrors, firstName: false});
-                          }}
-                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
-                            formErrors.firstName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
-                          }`}
-                          placeholder="First Name *"
-                        />
-                        {formErrors.firstName && <p className="text-xs text-red-600 font-semibold mt-1">First Name is required.</p>}
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Last Name *</label>
-                        <input 
-                          type="text" 
-                          value={editForm.lastName} 
-                          onChange={e => {
-                            setEditForm({...editForm, lastName: e.target.value});
-                            if (formErrors.lastName) setFormErrors({...formErrors, lastName: false});
-                          }}
-                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
-                            formErrors.lastName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
-                          }`}
-                          placeholder="Last Name *"
-                        />
-                        {formErrors.lastName && <p className="text-xs text-red-600 font-semibold mt-1">Last Name is required.</p>}
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Primary Staffing Role *</label>
-                        <select
-                          value={editForm.staffing_role}
-                          onChange={e => {
-                            setEditForm({...editForm, staffing_role: e.target.value});
-                            if (formErrors.staffing_role) setFormErrors({...formErrors, staffing_role: false});
-                          }}
-                          className={`w-full px-3 py-2 border rounded-md text-sm bg-white font-semibold outline-none transition-all ${
-                            formErrors.staffing_role 
-                              ? 'border-red-500 bg-red-50/50 text-red-600 ring-2 ring-red-100' 
-                              : 'border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500'
-                          }`}
-                        >
-                          <option value="" disabled>-- Select Staffing Role --</option>
-                          {availableRoles.map(role => (
-                            <option key={role.name} value={role.name}>
-                              {role.name} {role.description ? `- ${role.description}` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        {formErrors.staffing_role && <p className="text-xs text-red-600 font-semibold mt-1">Role is required.</p>}
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Email Address *</label>
-                        <input 
-                          type="email" 
-                          value={editForm.email} 
-                          onChange={e => {
-                            setEditForm({...editForm, email: e.target.value});
-                            if (formErrors.email) setFormErrors({...formErrors, email: false});
-                          }}
-                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
-                            formErrors.email ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
-                          }`}
-                          placeholder="e.g. employee@clinic.com *"
-                        />
-                        {formErrors.email && <p className="text-xs text-red-600 font-semibold mt-1">Email is required.</p>}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 className="font-h3 text-h3 text-slate-900">{selectedEmployee?.users?.name}</h3>
-                      <p className="text-primary font-semibold mt-1">
-                        {selectedEmployee?.job_title || 'New Employee'}
-                      </p>
-                    </>
-                  )}
-                  {!isCreating && <p className="text-xs text-slate-500 font-mono mt-1">Employee ID: {selectedEmployee?.employee_code}</p>}
-                </div>
-
-                {/* Datacard Body */}
-                <div className="p-6 flex-1 overflow-y-auto space-y-6">
-                  
-                  {/* Contact Info */}
-                  <div>
-                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Contact Information</h4>
-                    <div className="space-y-3">
+                
+                {isEditing ? (
+                  /* Edit Mode: Compact Multi-Column Single-Page Layout (No Vertical Scrollbar) */
+                  <div className="flex flex-col h-full overflow-hidden">
+                    {/* Header Bar */}
+                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-slate-400 text-sm">mail</span>
-                        {isEditing ? (
-                          <input 
-                            type="email" 
-                            value={editForm.email} 
-                            onChange={e => setEditForm({...editForm, email: e.target.value})}
-                            className="flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
-                            placeholder="Email address"
-                          />
-                        ) : (
-                          <a href={`mailto:${selectedEmployee?.users?.email}`} className="text-sm text-slate-700 hover:text-primary transition-colors">{selectedEmployee?.users?.email}</a>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-slate-400 text-sm">phone</span>
-                        {isEditing ? (
-                          <input 
-                            type="tel" 
-                            value={editForm.phone_number} 
-                            onChange={e => setEditForm({...editForm, phone_number: e.target.value})}
-                            className="flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
-                            placeholder="Phone number"
-                          />
-                        ) : (
-                          <a href={`tel:${selectedEmployee?.phone_number}`} className="text-sm text-slate-700 hover:text-primary transition-colors">{selectedEmployee?.phone_number || 'No phone provided'}</a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* System Access (Admins Only) */}
-                  {currentUser?.role === 'admin' && (
-                    <div>
-                      <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">System Access</h4>
-                      <div className="bg-orange-50 rounded-lg p-4 space-y-4 border border-orange-100">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-orange-800 font-medium">Access Level</span>
-                          {isEditing ? (
-                            <select
-                              value={editForm.systemRole}
-                              onChange={e => setEditForm({...editForm, systemRole: e.target.value})}
-                              className="px-2 py-1 border border-orange-300 rounded text-sm bg-white w-32 focus:ring-1 focus:ring-orange-500 outline-none"
-                            >
-                              <option value="staff">Staff</option>
-                              <option value="manager">Manager</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                          ) : (
-                            <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wider ${
-                              selectedEmployee?.users?.role === 'admin' ? 'bg-red-100 text-red-700' :
-                              selectedEmployee?.users?.role === 'manager' ? 'bg-orange-200 text-orange-800' :
-                              'bg-slate-200 text-slate-700'
-                            }`}>
-                              {selectedEmployee?.users?.role || 'staff'}
-                            </span>
-                          )}
+                        <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-base flex items-center justify-center shadow-xs uppercase">
+                          {isCreating ? '?' : selectedEmployee?.users?.name?.charAt(0) || '?'}
                         </div>
-                        {isEditing && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-orange-800 font-medium">Reset Password</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newPass = window.prompt(isCreating ? "Enter initial password:" : "Enter new password for this user:", "");
-                                if (newPass !== null && newPass.trim() !== '') {
-                                  setEditForm({...editForm, newPassword: newPass});
-                                }
-                              }}
-                              className="px-3 py-1 bg-white text-orange-700 hover:bg-orange-100 border border-orange-300 rounded text-xs font-semibold transition-colors flex items-center gap-1"
-                            >
-                              {editForm.newPassword ? (
-                                <>
-                                  <span className="material-symbols-outlined text-[14px]">check</span>
-                                  Will Reset
-                                </>
-                              ) : (
-                                "Set Password"
-                              )}
-                            </button>
-                          </div>
-                        )}
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm leading-tight">
+                            {isCreating ? 'Create New Employee' : `Editing ${selectedEmployee?.users?.name}`}
+                          </h3>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            {isCreating ? 'Fill in details to add staff member' : `Employee Code: ${selectedEmployee?.employee_code || 'N/A'}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          type="button"
+                          onClick={handleDiscard} 
+                          className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors"
+                        >
+                          Discard
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={handleSave} 
+                          className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-xs"
+                        >
+                          Save Changes
+                        </button>
                       </div>
                     </div>
-                  )}
 
-                  {/* Operational Details */}
-                  <div>
-                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Operational Details</h4>
-                    <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-slate-600">Seniority Date *</span>
-                        {isEditing ? (
-                          <div className="flex flex-col items-end">
+                    {/* Body: Structured 4-Column Grid for Zero-Scroll Fit */}
+                    <div className="p-4 flex-1 overflow-hidden space-y-3.5 text-left text-xs">
+                      
+                      {/* Section 1: Basic Identity & Contact (4 Cols) */}
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">1. Basic & Identity</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">First Name *</label>
+                            <input 
+                              type="text" 
+                              value={editForm.firstName} 
+                              onChange={e => {
+                                setEditForm({...editForm, firstName: e.target.value});
+                                if (formErrors.firstName) setFormErrors({...formErrors, firstName: false});
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                                formErrors.firstName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                              }`}
+                              placeholder="First Name *"
+                            />
+                            {formErrors.firstName && <p className="text-[10px] text-red-600 font-semibold mt-0.5">Required</p>}
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Last Name *</label>
+                            <input 
+                              type="text" 
+                              value={editForm.lastName} 
+                              onChange={e => {
+                                setEditForm({...editForm, lastName: e.target.value});
+                                if (formErrors.lastName) setFormErrors({...formErrors, lastName: false});
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                                formErrors.lastName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                              }`}
+                              placeholder="Last Name *"
+                            />
+                            {formErrors.lastName && <p className="text-[10px] text-red-600 font-semibold mt-0.5">Required</p>}
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Primary Role *</label>
+                            <select
+                              value={editForm.staffing_role}
+                              onChange={e => {
+                                setEditForm({...editForm, staffing_role: e.target.value});
+                                if (formErrors.staffing_role) setFormErrors({...formErrors, staffing_role: false});
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white font-semibold outline-none transition-all ${
+                                formErrors.staffing_role 
+                                  ? 'border-red-500 bg-red-50/50 text-red-600 ring-2 ring-red-100' 
+                                  : 'border-slate-300 text-blue-700 focus:ring-2 focus:ring-blue-500'
+                              }`}
+                            >
+                              <option value="" disabled>-- Select Role --</option>
+                              {availableRoles.map(role => (
+                                <option key={role.name} value={role.name}>{role.name}</option>
+                              ))}
+                            </select>
+                            {formErrors.staffing_role && <p className="text-[10px] text-red-600 font-semibold mt-0.5">Required</p>}
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Email Address *</label>
+                            <input 
+                              type="email" 
+                              value={editForm.email} 
+                              onChange={e => {
+                                setEditForm({...editForm, email: e.target.value});
+                                if (formErrors.email) setFormErrors({...formErrors, email: false});
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                                formErrors.email ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                              }`}
+                              placeholder="e.g. user@clinic.com *"
+                            />
+                            {formErrors.email && <p className="text-[10px] text-red-600 font-semibold mt-0.5">Required</p>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Contact, System & Operational Details (4 Cols) */}
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">2. Operational & Access</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Phone Number</label>
+                            <input 
+                              type="tel" 
+                              value={editForm.phone_number} 
+                              onChange={e => setEditForm({...editForm, phone_number: e.target.value})}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Phone number"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Seniority Date *</label>
                             <input 
                               type="date"
                               value={editForm.seniority_date}
@@ -801,143 +743,70 @@ export default function Employees() {
                                 setEditForm({...editForm, seniority_date: e.target.value});
                                 if (formErrors.seniority_date) setFormErrors({...formErrors, seniority_date: false});
                               }}
-                              className={`px-2 py-1.5 border rounded text-xs w-[140px] outline-none text-slate-700 transition-all ${
-                                formErrors.seniority_date ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-1 focus:ring-blue-500'
+                              className={`w-full px-2.5 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                                formErrors.seniority_date ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
                               }`}
                             />
-                            {formErrors.seniority_date && (
-                              <span className="text-[10px] text-red-600 font-semibold mt-0.5">Required date</span>
-                            )}
+                            {formErrors.seniority_date && <p className="text-[10px] text-red-600 font-semibold mt-0.5">Required</p>}
                           </div>
-                        ) : (
-                          <span className="text-sm font-semibold text-slate-700">
-                            {(selectedEmployee?.company_start_date || selectedEmployee?.seniority_date) ? new Date(selectedEmployee.company_start_date || selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">Standard Shift</span>
-                        {isEditing ? (
-                          <div className="flex items-center gap-1">
-                            <input 
-                              type="time" 
-                              value={(editForm.shift_time || '').split('-')[0] || ''} 
-                              onChange={e => {
-                                const end = (editForm.shift_time || '').split('-')[1] || '';
-                                const start = e.target.value;
-                                setEditForm({...editForm, shift_time: start || end ? `${start}-${end}` : ''});
-                              }}
-                              className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[105px] font-mono focus:ring-1 focus:ring-primary outline-none text-slate-700"
-                            />
-                            <span className="text-slate-400 font-bold">-</span>
-                            <input 
-                              type="time" 
-                              value={(editForm.shift_time || '').split('-')[1] || ''} 
-                              onChange={e => {
-                                const start = (editForm.shift_time || '').split('-')[0] || '';
-                                const end = e.target.value;
-                                setEditForm({...editForm, shift_time: start || end ? `${start}-${end}` : ''});
-                              }}
-                              className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[105px] font-mono focus:ring-1 focus:ring-primary outline-none text-slate-700"
-                            />
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Standard Shift Time</label>
+                            <div className="flex items-center gap-1">
+                              <input 
+                                type="time" 
+                                value={(editForm.shift_time || '').split('-')[0] || ''} 
+                                onChange={e => {
+                                  const end = (editForm.shift_time || '').split('-')[1] || '';
+                                  const start = e.target.value;
+                                  setEditForm({...editForm, shift_time: start || end ? `${start}-${end}` : ''});
+                                }}
+                                className="w-1/2 px-1.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                              <span className="text-slate-400 font-bold">-</span>
+                              <input 
+                                type="time" 
+                                value={(editForm.shift_time || '').split('-')[1] || ''} 
+                                onChange={e => {
+                                  const start = (editForm.shift_time || '').split('-')[0] || '';
+                                  const end = e.target.value;
+                                  setEditForm({...editForm, shift_time: start || end ? `${start}-${end}` : ''});
+                                }}
+                                className="w-1/2 px-1.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-sm font-semibold text-slate-900 font-mono">{selectedEmployee?.shift_time || 'Variable'}</span>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">Staffing Role</span>
-                        {isEditing ? (
-                          <select
-                            value={editForm.staffing_role}
-                            onChange={e => setEditForm({...editForm, staffing_role: e.target.value})}
-                            className="px-2 py-1 border border-slate-300 rounded text-sm uppercase tracking-wider bg-white w-32"
-                          >
-                            <option value="" disabled>Select Role</option>
-                            {availableRoles.map(role => (
-                              <option key={role.name} value={role.name}>{role.name}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-xs font-bold bg-slate-200 text-slate-700 px-2 py-1 rounded uppercase tracking-wider">{selectedEmployee?.staffing_role}</span>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-slate-500 font-medium">On-Call Status</span>
-                        {isEditing ? (
-                          <select 
-                            value={editForm.is_on_call ? 'yes' : 'no'}
-                            onChange={e => setEditForm({...editForm, is_on_call: e.target.value === 'yes'})}
-                            className="px-2 py-1 border border-slate-300 rounded text-sm bg-white w-24"
-                          >
-                            <option value="yes">Yes</option>
-                            <option value="no">No</option>
-                          </select>
-                        ) : (
-                          <span className="text-sm font-semibold text-slate-900">{selectedEmployee?.is_on_call ? 'Yes' : 'No'}</span>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <span className="text-xs text-slate-500 font-medium">Secondary Roles</span>
-                        <div className="flex flex-wrap gap-2">
-                          {isEditing ? (
-                            availableRoles.filter(r => r.name !== editForm.staffing_role).map(role => {
-                              const isSelected = editForm.secondary_roles.includes(role.name);
-                              return (
-                                <button
-                                  key={role.name}
-                                  onClick={() => handleSecondaryRoleToggle(role.name)}
-                                  className={`text-xs px-2 py-1 rounded-full font-medium border transition-colors flex items-center gap-1 ${
-                                    isSelected 
-                                      ? 'bg-purple-600 text-white border-purple-600' 
-                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  {isSelected && <span className="material-symbols-outlined text-[12px]">check</span>}
-                                  {role.name}
-                                </button>
-                              );
-                            })
-                          ) : selectedEmployee?.secondary_roles?.length > 0 ? (
-                            selectedEmployee.secondary_roles.map((sr, idx) => (
-                              <span key={idx} className="bg-purple-50 text-purple-700 border border-purple-100 text-xs px-2 py-1 rounded-full font-medium tracking-wider uppercase">
-                                {sr}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-sm text-slate-500 italic">No secondary roles.</span>
-                          )}
+
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">On-Call Status</label>
+                            <select 
+                              value={editForm.is_on_call ? 'yes' : 'no'}
+                              onChange={e => setEditForm({...editForm, is_on_call: e.target.value === 'yes'})}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="no">No (Regular Staff)</option>
+                              <option value="yes">Yes (On-Call)</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Leave & Accrual Settings */}
-                  <div>
-                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Leave & Accrual Settings</h4>
-                    <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
-                      
-                      {/* Sick Leave Accrual Date & Amount */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Date</span>
-                          {isEditing ? (
+                      {/* Section 3: Accrual & Leave Settings (4 Cols) */}
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">3. Leave & Accrual Settings</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Sick Accrual Date</label>
                             <input 
                               type="date"
                               value={editForm.sick_leave_accrual_date}
                               onChange={e => setEditForm({ ...editForm, sick_leave_accrual_date: e.target.value })}
-                              className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[140px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                             />
-                          ) : (
-                            <span className="text-xs font-semibold text-slate-700 font-mono">
-                              {accruals.sick_leave_accrual_date ? new Date(accruals.sick_leave_accrual_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
-                            </span>
-                          )}
-                        </div>
+                          </div>
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Amount</span>
-                          {isEditing ? (
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Sick Accrual Amount</label>
                             <div className="flex items-center gap-1">
                               <input 
                                 type="number"
@@ -945,28 +814,14 @@ export default function Employees() {
                                 placeholder="e.g. 24"
                                 value={editForm.sick_leave_accrual_amount}
                                 onChange={e => setEditForm({ ...editForm, sick_leave_accrual_amount: e.target.value })}
-                                className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[100px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                               />
-                              <span className="text-xs text-slate-500 font-medium">hrs</span>
+                              <span className="text-xs text-slate-500 font-bold shrink-0">hrs</span>
                             </div>
-                          ) : (
-                            <span className="text-xs font-semibold text-slate-700 font-mono">
-                              {accruals.sick_leave_accrual_amount !== '' && accruals.sick_leave_accrual_amount !== null ? `${accruals.sick_leave_accrual_amount} hrs` : 'Not set'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-400 italic leading-snug">
-                          Starting on {editForm.sick_leave_accrual_date || accruals.sick_leave_accrual_date || 'MM/DD/YY'}, sick leave accrual will be {editForm.sick_leave_accrual_amount || accruals.sick_leave_accrual_amount || '0'} hrs.
-                        </p>
-                      </div>
+                          </div>
 
-                      <hr className="border-slate-200" />
-
-                      {/* Vacation Accrual Rate */}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-600">Vacation Accrual Rate</span>
-                          {isEditing ? (
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Vacation Accrual Rate</label>
                             <div className="flex items-center gap-1">
                               <input 
                                 type="number"
@@ -974,87 +829,276 @@ export default function Employees() {
                                 placeholder="e.g. 8.33"
                                 value={editForm.vacation_accrual_rate}
                                 onChange={e => setEditForm({ ...editForm, vacation_accrual_rate: e.target.value })}
-                                className="px-2 py-1.5 border border-slate-300 rounded text-xs w-[110px] outline-none text-slate-700 focus:ring-1 focus:ring-blue-500 bg-white"
+                                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                               />
-                              <span className="text-xs text-slate-500 font-medium">hrs/month</span>
+                              <span className="text-xs text-slate-500 font-bold shrink-0">hrs/mo</span>
                             </div>
-                          ) : (
-                            <span className="text-xs font-semibold text-slate-700 font-mono">
-                              {accruals.vacation_accrual_rate !== '' && accruals.vacation_accrual_rate !== null ? `${accruals.vacation_accrual_rate} hrs/month` : 'Not set'}
-                            </span>
+                          </div>
+
+                          {currentUser?.role === 'admin' && (
+                            <div>
+                              <label className="text-[11px] font-bold text-slate-600 block mb-1">System Role & Pass</label>
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={editForm.systemRole}
+                                  onChange={e => setEditForm({...editForm, systemRole: e.target.value})}
+                                  className="w-1/2 px-2 py-1.5 border border-orange-300 rounded-lg text-xs bg-orange-50 font-bold text-orange-900 outline-none"
+                                >
+                                  <option value="staff">Staff</option>
+                                  <option value="manager">Manager</option>
+                                  <option value="admin">Admin</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newPass = window.prompt(isCreating ? "Enter initial password:" : "Enter new password:", "");
+                                    if (newPass !== null && newPass.trim() !== '') {
+                                      setEditForm({...editForm, newPassword: newPass});
+                                    }
+                                  }}
+                                  className="w-1/2 px-1.5 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300 rounded-lg text-[10px] font-bold truncate transition-colors"
+                                >
+                                  {editForm.newPassword ? "Password Set" : "Set Password"}
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-400 italic leading-snug">
-                          Accrues at {editForm.vacation_accrual_rate || accruals.vacation_accrual_rate || '0.00'} hours per month every pay period.
-                        </p>
+                      </div>
+
+                      {/* Section 4: Secondary Roles & Supported Clinics (2 Cols) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Secondary Roles</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {availableRoles.filter(r => r.name !== editForm.staffing_role).map(role => {
+                              const isSelected = editForm.secondary_roles.includes(role.name);
+                              return (
+                                <button
+                                  type="button"
+                                  key={role.name}
+                                  onClick={() => handleSecondaryRoleToggle(role.name)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full font-bold border transition-colors flex items-center gap-1 ${
+                                    isSelected 
+                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs' 
+                                      : 'bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {isSelected && <span className="material-symbols-outlined text-[12px]">check</span>}
+                                  {role.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Supported Clinics</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {clinics.map(clinic => {
+                              const isSelected = editForm.clinics.includes(clinic.id);
+                              return (
+                                <button
+                                  type="button"
+                                  key={clinic.id}
+                                  onClick={() => handleClinicToggle(clinic.id)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full font-bold border transition-colors flex items-center gap-1 ${
+                                    isSelected 
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs' 
+                                      : 'bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {isSelected && <span className="material-symbols-outlined text-[12px]">check</span>}
+                                  {clinic.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 5: 2-Week Schedule Pattern */}
+                      <div className="pt-1">
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">2-Week Schedule Pattern</span>
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          <ScheduleSelector 
+                            pattern={editForm.schedulePattern} 
+                            onChange={p => setEditForm({ ...editForm, schedulePattern: p })}
+                            readonly={false}
+                          />
+                        </div>
                       </div>
 
                     </div>
-                  </div>
 
-                  {/* Schedule Pattern */}
-                  <div>
-                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">2-Week Schedule</h4>
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                      <ScheduleSelector 
-                        pattern={isEditing ? editForm.schedulePattern : selectedEmployee?.schedule_pattern} 
-                        onChange={p => setEditForm({ ...editForm, schedulePattern: p })}
-                        readonly={!isEditing}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Clinics Support */}
-                  <div>
-                    <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Supported Clinics</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {isEditing ? (
-                        clinics.map(clinic => {
-                          const isSelected = editForm.clinics.includes(clinic.id);
-                          return (
-                            <button
-                              key={clinic.id}
-                              onClick={() => handleClinicToggle(clinic.id)}
-                              className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors flex items-center gap-1 ${
-                                isSelected 
-                                  ? 'bg-blue-600 text-white border-blue-600' 
-                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              {isSelected && <span className="material-symbols-outlined text-[14px]">check</span>}
-                              {clinic.name}
-                            </button>
-                          );
-                        })
-                      ) : selectedEmployee?.users?.employee_clinics?.length > 0 ? (
-                        selectedEmployee.users.employee_clinics
-                          .filter(ec => ec.locations?.parent_location_id !== null && ec.clinic_id !== selectedDepartmentId)
-                          .map((ec, idx) => (
-                            <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-100 text-xs px-3 py-1.5 rounded-full font-medium">
-                              {ec.locations?.name || 'Unknown Clinic'}
-                            </span>
-                          ))
-                      ) : (
-                        <span className="text-sm text-slate-500 italic">No clinic assignments.</span>
-                      )}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Datacard Footer */}
-                <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3">
-                  {isEditing ? (
-                    <>
-                      <button onClick={handleDiscard} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors">
+                    {/* Footer Bar */}
+                    <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2 shrink-0">
+                      <button 
+                        type="button"
+                        onClick={handleDiscard} 
+                        className="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors"
+                      >
                         Discard
                       </button>
-                      <button onClick={handleSave} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
-                        Save
+                      <button 
+                        type="button"
+                        onClick={handleSave} 
+                        className="px-6 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                      >
+                        Save Changes
                       </button>
-                    </>
-                  ) : (
-                    <>
+                    </div>
+                  </div>
+                ) : (
+                  /* View Mode: Compact Standard Width Card */
+                  <>
+                    {/* Datacard Header */}
+                    <div className="bg-slate-50 p-6 border-b border-slate-200 flex flex-col items-center text-center">
+                      <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-3xl mb-4 border-4 border-white shadow-sm uppercase">
+                        {selectedEmployee?.users?.name?.charAt(0) || '?'}
+                      </div>
+                      <h3 className="font-h3 text-h3 text-slate-900">{selectedEmployee?.users?.name}</h3>
+                      <p className="text-primary font-semibold mt-1">
+                        {selectedEmployee?.job_title || 'New Employee'}
+                      </p>
+                      <p className="text-xs text-slate-500 font-mono mt-1">Employee ID: {selectedEmployee?.employee_code}</p>
+                    </div>
+
+                    {/* Datacard Body */}
+                    <div className="p-6 flex-1 overflow-y-auto space-y-6">
+                      
+                      {/* Contact Info */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Contact Information</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-slate-400 text-sm">mail</span>
+                            <a href={`mailto:${selectedEmployee?.users?.email}`} className="text-sm text-slate-700 hover:text-primary transition-colors">{selectedEmployee?.users?.email}</a>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-slate-400 text-sm">phone</span>
+                            <a href={`tel:${selectedEmployee?.phone_number}`} className="text-sm text-slate-700 hover:text-primary transition-colors">{selectedEmployee?.phone_number || 'No phone provided'}</a>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* System Access (Admins Only) */}
+                      {currentUser?.role === 'admin' && (
+                        <div>
+                          <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">System Access</h4>
+                          <div className="bg-orange-50 rounded-lg p-4 space-y-4 border border-orange-100">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-orange-800 font-medium">Access Level</span>
+                              <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wider ${
+                                selectedEmployee?.users?.role === 'admin' ? 'bg-red-100 text-red-700' :
+                                selectedEmployee?.users?.role === 'manager' ? 'bg-orange-200 text-orange-800' :
+                                'bg-slate-200 text-slate-700'
+                              }`}>
+                                {selectedEmployee?.users?.role || 'staff'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Operational Details */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Operational Details</h4>
+                        <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-600">Seniority Date</span>
+                            <span className="text-sm font-semibold text-slate-700">
+                              {(selectedEmployee?.company_start_date || selectedEmployee?.seniority_date) ? new Date(selectedEmployee.company_start_date || selectedEmployee.seniority_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-slate-500 font-medium">Standard Shift</span>
+                            <span className="text-sm font-semibold text-slate-900 font-mono">{selectedEmployee?.shift_time || 'Variable'}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-slate-500 font-medium">Staffing Role</span>
+                            <span className="text-xs font-bold bg-slate-200 text-slate-700 px-2 py-1 rounded uppercase tracking-wider">{selectedEmployee?.staffing_role}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-slate-500 font-medium">On-Call Status</span>
+                            <span className="text-sm font-semibold text-slate-900">{selectedEmployee?.is_on_call ? 'Yes' : 'No'}</span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs text-slate-500 font-medium">Secondary Roles</span>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedEmployee?.secondary_roles?.length > 0 ? (
+                                selectedEmployee.secondary_roles.map((sr, idx) => (
+                                  <span key={idx} className="bg-purple-50 text-purple-700 border border-purple-100 text-xs px-2 py-1 rounded-full font-medium tracking-wider uppercase">
+                                    {sr}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-sm text-slate-500 italic">No secondary roles.</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Leave & Accrual Settings */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Leave & Accrual Settings</h4>
+                        <div className="bg-slate-50 rounded-lg p-4 space-y-4 border border-slate-100">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Date</span>
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.sick_leave_accrual_date ? new Date(accruals.sick_leave_accrual_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-600">Sick Leave Accrual Amount</span>
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.sick_leave_accrual_amount !== '' && accruals.sick_leave_accrual_amount !== null ? `${accruals.sick_leave_accrual_amount} hrs` : 'Not set'}
+                            </span>
+                          </div>
+                          <hr className="border-slate-200" />
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-600">Vacation Accrual Rate</span>
+                            <span className="text-xs font-semibold text-slate-700 font-mono">
+                              {accruals.vacation_accrual_rate !== '' && accruals.vacation_accrual_rate !== null ? `${accruals.vacation_accrual_rate} hrs/month` : 'Not set'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Schedule Pattern */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">2-Week Schedule</h4>
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                          <ScheduleSelector 
+                            pattern={selectedEmployee?.schedule_pattern} 
+                            readonly={true}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Clinics Support */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Supported Clinics</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedEmployee?.users?.employee_clinics?.length > 0 ? (
+                            selectedEmployee.users.employee_clinics
+                              .filter(ec => ec.locations?.parent_location_id !== null && ec.clinic_id !== selectedDepartmentId)
+                              .map((ec, idx) => (
+                                <span key={idx} className="bg-blue-50 text-blue-700 border border-blue-100 text-xs px-3 py-1.5 rounded-full font-medium">
+                                  {ec.locations?.name || 'Unknown Clinic'}
+                                </span>
+                              ))
+                          ) : (
+                            <span className="text-sm text-slate-500 italic">No clinic assignments.</span>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Datacard Footer */}
+                    <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3">
                       <button onClick={handleEditClick} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors">
                         Edit Profile
                       </button>
@@ -1062,9 +1106,9 @@ export default function Employees() {
                         <span className="material-symbols-outlined text-[16px]">delete</span>
                         Delete
                       </button>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </>
+                )}
 
               </div>
               );
