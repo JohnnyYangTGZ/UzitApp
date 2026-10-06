@@ -67,6 +67,7 @@ export default function AdminDashboard() {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
   const [headerDates, setHeaderDates] = useState([]);
+  const [fullWeekDateStrs, setFullWeekDateStrs] = useState([]);
 
   const shiftDate = (days) => {
     const parts = selectedDate.split('-').map(Number);
@@ -161,6 +162,7 @@ export default function AdminDashboard() {
           shortDates.push(`${d.getMonth() + 1}/${d.getDate()}`);
         }
         setHeaderDates(shortDates);
+        setFullWeekDateStrs(weekDates);
 
         const { data: timeOffData } = await supabase
           .from('time_off_requests')
@@ -384,20 +386,40 @@ export default function AdminDashboard() {
                 ) : (
                   <div className="w-full text-center max-w-2xl mx-auto flex flex-col gap-8">
                     <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                      <div className="grid grid-cols-8 gap-2 mb-3">
+                      <div className="grid grid-cols-8 gap-2 mb-3 items-center">
                         <div className="text-xs font-bold text-slate-400 flex items-center">ROLE</div>
-                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                          <div key={i} className="flex flex-col items-center justify-center py-1">
-                            <span className="text-xs font-bold text-slate-500">{day}</span>
-                            <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{headerDates[i]}</span>
-                          </div>
-                        ))}
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => {
+                          const dateStr = fullWeekDateStrs[i];
+                          const isSelected = dateStr === selectedDate;
+                          return (
+                            <div 
+                              key={i} 
+                              onClick={() => {
+                                if (dateStr) setSelectedDate(dateStr);
+                              }}
+                              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl cursor-pointer transition-all duration-200 ${
+                                isSelected 
+                                  ? 'bg-blue-600 text-white font-black shadow-md ring-2 ring-blue-400 border border-blue-700 scale-105 z-10' 
+                                  : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}
+                              title={dateStr ? `Select ${dateStr}` : ''}
+                            >
+                              <span className={`text-xs font-black ${isSelected ? 'text-white' : 'text-slate-700'}`}>{day}</span>
+                              <span className={`text-[11px] font-extrabold mt-0.5 px-1.5 py-0.2 rounded-md ${
+                                isSelected ? 'bg-white/20 text-white shadow-2xs' : 'text-slate-500'
+                              }`}>
+                                {headerDates[i]}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                       {['RN', 'LVN', 'MA'].map(role => (
                         <div key={role} className="grid grid-cols-8 gap-2 items-center mb-2">
                           <div className="text-sm font-bold text-slate-600 text-left">{role}</div>
                           {clinicActualShiftCounts[role].map((actual, i) => {
                             const required = clinicDailyShiftCounts[role][i];
+                            const isSelectedColumn = fullWeekDateStrs[i] === selectedDate;
                             let cellStyle = 'text-slate-300 bg-white border border-slate-100'; // Default / Grey (Actual == 0 && Required == 0)
                             
                             if (required > 0 || actual > 0) {
@@ -417,7 +439,13 @@ export default function AdminDashboard() {
                               <div key={i} className="relative">
                                 <div 
                                   onClick={() => setActiveCell(isActive ? null : { role, dayIndex: i })}
-                                  className={`text-xs font-semibold rounded-md py-1.5 cursor-pointer hover:opacity-80 transition-opacity ${cellStyle} flex items-center justify-center gap-1 border-2 ${isActive ? 'border-primary/50' : 'border-transparent'}`}
+                                  className={`text-xs font-semibold rounded-md py-1.5 cursor-pointer hover:opacity-80 transition-all ${cellStyle} flex items-center justify-center gap-1 border-2 ${
+                                    isSelectedColumn 
+                                      ? 'ring-2 ring-blue-500 border-blue-600 shadow-sm font-black' 
+                                      : isActive 
+                                        ? 'border-primary/50' 
+                                        : 'border-transparent'
+                                  }`}
                                 >
                                   <span>{actual}</span>
                                   <span className="opacity-60 font-normal text-[10px]">({required})</span>
