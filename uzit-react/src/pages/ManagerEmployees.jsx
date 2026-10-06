@@ -285,11 +285,12 @@ export default function ManagerEmployees() {
     return days;
   };
   
-  const ytdSick = absences.filter(a => a.absence_type === 'Sick Call').length;
-  const ytdNoShow = absences.filter(a => a.absence_type === 'No Call No Show').length;
-  const ytdTardy = absences.filter(a => a.absence_type === 'Tardy').length;
+  const ytdSick = absences.filter(a => a.absence_type === 'Sick Call' || a.absence_type === 'SCK' || a.absence_type === 'SCL').length;
+  const ytdTardy = absences.filter(a => a.absence_type === 'Tardy' || a.absence_type === 'TDT' || a.absence_type === 'TWK').length;
+  const ytdVacation = (timeOffRequests.filter(r => r.status === 'approved' && (r.time_off_type_code === 'PTO' || r.time_off_type_code === 'VAC' || (r.time_off_types?.name || '').toLowerCase().includes('vacation'))).length) +
+    (absences.filter(a => a.absence_type === 'Vacation' || a.absence_type === 'VAC' || a.absence_type === 'PTO').length);
   
-  const totalAbsences = ytdSick + ytdNoShow + ytdTardy;
+  const totalAbsences = ytdSick + ytdTardy;
   const onTimeRate = ytdShiftsCount === 0 ? 100 : Math.max(0, Math.round(((ytdShiftsCount - totalAbsences) / ytdShiftsCount) * 100));
 
   return (
@@ -556,8 +557,8 @@ export default function ManagerEmployees() {
                             <p className="text-3xl font-bold text-blue-600">{ytdTardy}</p>
                           </div>
                           <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">No Shows</p>
-                            <p className="text-3xl font-bold text-slate-800">{ytdNoShow}</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">VAC / PTO</p>
+                            <p className="text-3xl font-bold text-slate-800">{ytdVacation}</p>
                           </div>
                         </div>
                       </div>
