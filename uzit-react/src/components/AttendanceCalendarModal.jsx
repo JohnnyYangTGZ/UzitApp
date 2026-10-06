@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
 
 export default function AttendanceCalendarModal({ isOpen, onClose, employee }) {
-  const { clinics, selectedClinicId, selectedDepartmentId } = useLocationContext();
+  const { departments, selectedDepartmentId, clinics, selectedClinicId } = useLocationContext();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -179,6 +179,12 @@ export default function AttendanceCalendarModal({ isOpen, onClose, employee }) {
 
   if (!isOpen || !employee) return null;
 
+  const currentDeptObj = departments.find(d => d.id === selectedDepartmentId);
+  const rawDeptName = currentDeptObj?.name || employee.department_name || employee.department || 'Urgent Care';
+  const deptDisplay = rawDeptName.toUpperCase().includes('DEPARTMENT')
+    ? rawDeptName.toUpperCase()
+    : `${rawDeptName.toUpperCase()} DEPARTMENT`;
+
   const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'AFM1';
   const employeeName = employee.users?.name || employee.name || 'Employee';
   const employeeCode = employee.employee_code || '#N/A';
@@ -348,11 +354,12 @@ export default function AttendanceCalendarModal({ isOpen, onClose, employee }) {
           {/* Top Banner Header */}
           <div className="flex items-end justify-between border-b-2 border-slate-900 pb-1.5">
             <div>
-              <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">ABSENTEE CALENDAR</h1>
+              <div className="text-[11px] font-black tracking-widest text-slate-500 uppercase">ABSENTEE CALENDAR</div>
+              <h1 className="text-xl font-black tracking-tight text-slate-900 uppercase">{employeeName}</h1>
               <p className="text-[10px] font-semibold text-slate-500">Updated: {new Date().toLocaleDateString('en-US')}</p>
             </div>
             <div className="text-right">
-              <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wide">AFM DEPARTMENT OF ADULT AND FAMILY MEDICINE</span>
+              <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wide">{deptDisplay}</span>
             </div>
           </div>
 
