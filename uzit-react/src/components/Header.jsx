@@ -38,6 +38,10 @@ export default function Header() {
           <span className="material-symbols-outlined text-2xl">menu</span>
         </button>
 
+        <Link to="/" className="md:hidden flex items-center shrink-0">
+          <img src="/logo.png" alt="Uzit Logo" className="h-7 w-auto object-contain" />
+        </Link>
+
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Department:</span>
           {loadingDepartments ? (

@@ -93,13 +93,10 @@ export default function Sidebar() {
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
         {/* Brand / App Logo Header Bar */}
-        <div className="flex items-center justify-between px-6 h-16 border-b border-slate-200 bg-white mb-6 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-sm">
-              U
-            </div>
-            <span className="font-extrabold text-slate-900 text-lg tracking-tight">Uzit</span>
-          </div>
+        <div className="flex items-center justify-between px-5 h-16 border-b border-slate-200 bg-white mb-6 shrink-0">
+          <Link to="/" className="flex items-center">
+            <img src="/logo.png" alt="Uzit Logo" className="h-10 w-auto object-contain max-w-[170px]" />
+          </Link>
           <button 
             onClick={() => setMobileOpen(false)}
             className="md:hidden p-1 rounded-lg text-slate-500 hover:bg-slate-100"
