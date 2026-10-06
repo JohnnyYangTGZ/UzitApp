@@ -15,6 +15,13 @@ function getCycleDayIndex(dateObj) {
   return cycleDayIndex;
 }
 
+function formatSelectedDateStr(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function AdminDashboard() {
   const { clinics, selectedClinicId, setSelectedClinicId, loadingClinics } = useLocationContext();
   const navigate = useNavigate();
@@ -252,12 +259,8 @@ export default function AdminDashboard() {
       setClinicDailyShiftCounts(dailyCounts);
 
       if (validUserIds.length > 0) {
-        // Fetch Staff Off Today (using local date)
-        const localDate = new Date();
-        const year = localDate.getFullYear();
-        const month = String(localDate.getMonth() + 1).padStart(2, '0');
-        const day = String(localDate.getDate()).padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
+        // Fetch Staff Off for selectedDate
+        const targetDateStr = selectedDate;
 
         const { data: offData } = await supabase
           .from('time_off_requests')
@@ -269,22 +272,31 @@ export default function AdminDashboard() {
           `)
           .eq('status', 'approved')
           .in('user_id', validUserIds)
-          .lte('start_date', todayStr)
-          .gte('end_date', todayStr);
+          .lte('start_date', targetDateStr)
+          .gte('end_date', targetDateStr);
         
         setStaffOff(offData || []);
 
-        const { data: onCallAvail } = await supabase
+        const { data: availData } = await supabase
           .from('employee_availability')
-          .select(`
-            user_id, shift_time, notes,
-            users ( name ),
-            employee_profiles!inner ( job_title )
-          `)
-          .eq('date', todayStr)
+          .select('user_id, shift_time, notes, date')
+          .eq('date', targetDateStr)
           .in('user_id', validUserIds);
 
-        setStaffOnCall(onCallAvail || []);
+        if (availData && availData.length > 0) {
+          const availUserIds = availData.map(a => a.user_id);
+          const { data: availUsers } = await supabase.from('users').select('id, name').in('id', availUserIds);
+          const { data: availProfiles } = await supabase.from('employee_profiles').select('user_id, job_title, staffing_role, is_on_call').in('user_id', availUserIds);
+
+          const formattedAvail = availData.map(a => ({
+            ...a,
+            users: availUsers?.find(u => u.id === a.user_id),
+            employee_profiles: availProfiles?.find(p => p.user_id === a.user_id)
+          }));
+          setStaffOnCall(formattedAvail);
+        } else {
+          setStaffOnCall([]);
+        }
       } else {
         setStaffOff([]);
         setStaffOnCall([]);
@@ -500,16 +512,16 @@ export default function AdminDashboard() {
 
         {/* Dashboard Middle Section */}
         <div className="grid grid-cols-1 gap-8">
-          {/* Today's Adjustments */}
+          {/* Adjustments for Selected Date */}
           <div className="space-y-6">
-            <h3 className="font-h2 text-h2 text-on-surface">Today's Adjustments</h3>
+            <h3 className="font-h2 text-h2 text-on-surface">Adjustments for {formatSelectedDateStr(selectedDate)}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Staff Off Today */}
+              {/* Staff Off */}
               <div className="bg-white rounded-xl border border-surface-border shadow-sm overflow-hidden">
                 <div className="px-5 py-4 border-b border-surface-border bg-slate-50 flex items-center gap-2">
                   <span className="material-symbols-outlined text-slate-500">event_busy</span>
-                  <h4 className="font-semibold text-on-surface">Staff Off Today</h4>
+                  <h4 className="font-semibold text-on-surface">Staff Off ({formatSelectedDateStr(selectedDate)})</h4>
                 </div>
                 <div className="p-2">
                   {loadingStats ? (
@@ -530,16 +542,18 @@ export default function AdminDashboard() {
                       </div>
                     ))
                   ) : (
-                    <div className="p-6 text-center text-sm text-slate-500">No staff scheduled off today.</div>
+                    <div className="p-6 text-center text-sm text-slate-500">No staff scheduled off for this date.</div>
                   )}
                 </div>
               </div>
 
-              {/* Staff On Call */}
+              {/* Available Staff / On-Call */}
               <div className="bg-white rounded-xl border border-surface-border shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-surface-border bg-slate-50 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-slate-500">contact_phone</span>
-                  <h4 className="font-semibold text-on-surface">Available On-Call</h4>
+                <div className="px-5 py-4 border-b border-surface-border bg-slate-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-slate-500">contact_phone</span>
+                    <h4 className="font-semibold text-on-surface">Available Staff / On-Call ({formatSelectedDateStr(selectedDate)})</h4>
+                  </div>
                 </div>
                 <div className="p-2">
                   {loadingStats ? (
@@ -548,22 +562,29 @@ export default function AdminDashboard() {
                     staffOnCall.map(staff => (
                       <div key={staff.user_id} className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex justify-between items-center group cursor-pointer">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs uppercase">
                             {staff.users?.name?.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">{staff.users?.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-900">{staff.users?.name}</p>
+                              {staff.employee_profiles?.is_on_call ? (
+                                <span className="text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-200 px-1.5 py-0.5 rounded uppercase">On-Call</span>
+                              ) : (
+                                <span className="text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded uppercase">Available</span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500">
-                              {staff.employee_profiles?.job_title}
+                              {staff.employee_profiles?.job_title || staff.employee_profiles?.staffing_role}
                               {staff.notes && <span className="text-slate-400 italic ml-1">- {staff.notes}</span>}
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{staff.shift_time || 'Any'}</span>
+                        <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">{staff.shift_time || 'Any'}</span>
                       </div>
                     ))
                   ) : (
-                    <div className="p-6 text-center text-sm text-slate-500">No on-call staff available.</div>
+                    <div className="p-6 text-center text-sm text-slate-500">No available staff or on-call entries for this date.</div>
                   )}
                 </div>
               </div>
