@@ -593,7 +593,9 @@ export default function Employees() {
           </div>
 
           {/* Datacard Area (Right) */}
-          <div className="w-[450px] flex-shrink-0">
+          <div className={`transition-all duration-300 ease-in-out flex-shrink-0 ${
+            (isEditing || isCreating) ? 'w-full md:w-[680px] xl:w-[760px]' : 'w-full md:w-[420px]'
+          }`}>
             {selectedEmployee || isCreating ? (() => {
               const accruals = getAccrualInfo(selectedEmployee);
               return (
@@ -604,41 +606,43 @@ export default function Employees() {
                     {isCreating ? '?' : selectedEmployee?.users?.name?.charAt(0) || '?'}
                   </div>
                   {isEditing ? (
-                    <div className="w-full space-y-3">
+                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
                       <div>
-                        <div className="flex gap-2">
-                          <input 
-                            type="text" 
-                            value={editForm.firstName} 
-                            onChange={e => {
-                              setEditForm({...editForm, firstName: e.target.value});
-                              if (formErrors.firstName) setFormErrors({...formErrors, firstName: false});
-                            }}
-                            className={`w-1/2 px-3 py-2 border rounded-md text-sm outline-none transition-all ${
-                              formErrors.firstName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
-                            }`}
-                            placeholder="First Name *"
-                          />
-                          <input 
-                            type="text" 
-                            value={editForm.lastName} 
-                            onChange={e => {
-                              setEditForm({...editForm, lastName: e.target.value});
-                              if (formErrors.lastName) setFormErrors({...formErrors, lastName: false});
-                            }}
-                            className={`w-1/2 px-3 py-2 border rounded-md text-sm outline-none transition-all ${
-                              formErrors.lastName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
-                            }`}
-                            placeholder="Last Name *"
-                          />
-                        </div>
-                        {(formErrors.firstName || formErrors.lastName) && (
-                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">First and Last Name are required.</p>
-                        )}
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">First Name *</label>
+                        <input 
+                          type="text" 
+                          value={editForm.firstName} 
+                          onChange={e => {
+                            setEditForm({...editForm, firstName: e.target.value});
+                            if (formErrors.firstName) setFormErrors({...formErrors, firstName: false});
+                          }}
+                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
+                            formErrors.firstName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                          placeholder="First Name *"
+                        />
+                        {formErrors.firstName && <p className="text-xs text-red-600 font-semibold mt-1">First Name is required.</p>}
                       </div>
 
                       <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1 text-left">Primary Staffing Role *</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Last Name *</label>
+                        <input 
+                          type="text" 
+                          value={editForm.lastName} 
+                          onChange={e => {
+                            setEditForm({...editForm, lastName: e.target.value});
+                            if (formErrors.lastName) setFormErrors({...formErrors, lastName: false});
+                          }}
+                          className={`w-full px-3 py-2 border rounded-md text-sm outline-none transition-all ${
+                            formErrors.lastName ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100' : 'border-slate-300 focus:ring-2 focus:ring-blue-500'
+                          }`}
+                          placeholder="Last Name *"
+                        />
+                        {formErrors.lastName && <p className="text-xs text-red-600 font-semibold mt-1">Last Name is required.</p>}
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Primary Staffing Role *</label>
                         <select
                           value={editForm.staffing_role}
                           onChange={e => {
@@ -658,13 +662,11 @@ export default function Employees() {
                             </option>
                           ))}
                         </select>
-                        {formErrors.staffing_role && (
-                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">Please select a primary staffing role.</p>
-                        )}
+                        {formErrors.staffing_role && <p className="text-xs text-red-600 font-semibold mt-1">Role is required.</p>}
                       </div>
 
                       <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1 text-left">Email Address *</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Email Address *</label>
                         <input 
                           type="email" 
                           value={editForm.email} 
@@ -677,9 +679,7 @@ export default function Employees() {
                           }`}
                           placeholder="e.g. employee@clinic.com *"
                         />
-                        {formErrors.email && (
-                          <p className="text-xs text-red-600 font-semibold mt-1 text-left">Email address is required to create a user account.</p>
-                        )}
+                        {formErrors.email && <p className="text-xs text-red-600 font-semibold mt-1">Email is required.</p>}
                       </div>
                     </div>
                   ) : (
