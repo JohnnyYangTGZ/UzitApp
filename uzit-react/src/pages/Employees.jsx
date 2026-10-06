@@ -4,14 +4,12 @@ import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
 import { useAuth } from '../context/AuthContext';
 import ScheduleSelector, { DEFAULT_PATTERN } from '../components/ScheduleSelector';
-import AttendanceCalendarModal from '../components/AttendanceCalendarModal';
 
 export default function Employees() {
   const { selectedDepartmentId, clinics } = useLocationContext();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
@@ -1101,10 +1099,6 @@ export default function Employees() {
 
                     {/* Datacard Footer */}
                     <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-2 flex-wrap sm:flex-nowrap">
-                      <button type="button" onClick={() => setIsAttendanceModalOpen(true)} className="flex-1 bg-indigo-50 border border-indigo-200 text-indigo-800 py-2 px-3 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1.5 shadow-2xs">
-                        <span className="material-symbols-outlined text-[16px]">calendar_month</span>
-                        Attendance Calendar
-                      </button>
                       <button onClick={handleEditClick} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 px-3 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors">
                         Edit Profile
                       </button>
@@ -1129,13 +1123,6 @@ export default function Employees() {
 
         </div>
       </div>
-
-      {/* Attendance Calendar PDF Printable Modal */}
-      <AttendanceCalendarModal
-        isOpen={isAttendanceModalOpen}
-        onClose={() => setIsAttendanceModalOpen(false)}
-        employee={selectedEmployee}
-      />
     </Layout>
   );
 }
