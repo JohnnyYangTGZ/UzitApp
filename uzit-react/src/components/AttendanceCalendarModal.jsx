@@ -291,10 +291,10 @@ export default function AttendanceCalendarModal({ isOpen, onClose, employee }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:inset-auto">
       
       {/* Printable Modal Container */}
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-[1280px] flex flex-col overflow-hidden my-auto print:shadow-none print:border-none print:w-full print:max-w-none print:m-0 print:p-0">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-[1280px] max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none print:w-full print:max-w-none print:m-0 print:p-0 print:overflow-visible">
         
         {/* Screen Controls Header (Hidden on Print) */}
         <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between border-b border-slate-800 print:hidden shrink-0">
@@ -343,7 +343,7 @@ export default function AttendanceCalendarModal({ isOpen, onClose, employee }) {
         </div>
 
         {/* Printable Content Section */}
-        <div id="printable-attendance-calendar" className="p-4 md:p-6 bg-white flex flex-col gap-3 font-sans text-slate-900 print:p-2">
+        <div id="printable-attendance-calendar" className="p-4 md:p-6 bg-white flex flex-col gap-3 font-sans text-slate-900 overflow-y-auto flex-1 print:overflow-visible print:p-2">
           
           {/* Top Banner Header */}
           <div className="flex items-end justify-between border-b-2 border-slate-900 pb-1.5">
