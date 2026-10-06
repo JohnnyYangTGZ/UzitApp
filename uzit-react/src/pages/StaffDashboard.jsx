@@ -13,8 +13,54 @@ export default function StaffDashboard() {
   const [upcomingShift, setUpcomingShift] = useState(null);
   const [recentRequests, setRecentRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [weeklyShifts, setWeeklyShifts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showAllNotifsModal, setShowAllNotifsModal] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [readNotifsMap, setReadNotifsMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`read_notifs_${user?.id}`) || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const handleMarkAsRead = (notifId, e) => {
+    if (e) e.stopPropagation();
+    const nowISO = new Date().toISOString();
+    const updated = { ...readNotifsMap, [notifId]: nowISO };
+    setReadNotifsMap(updated);
+    if (user?.id) {
+      localStorage.setItem(`read_notifs_${user.id}`, JSON.stringify(updated));
+    }
+  };
+
+  const handleMarkAllAsRead = () => {
+    const nowISO = new Date().toISOString();
+    const updated = { ...readNotifsMap };
+    notifications.forEach(n => {
+      if (!updated[n.id]) {
+        updated[n.id] = nowISO;
+      }
+    });
+    setReadNotifsMap(updated);
+    if (user?.id) {
+      localStorage.setItem(`read_notifs_${user.id}`, JSON.stringify(updated));
+    }
+  };
+
+  const handleNotificationClick = (notif) => {
+    handleMarkAsRead(notif.id);
+    navigate(`/my-schedule?date=${notif.dateStr}`);
+  };
+
+  const formatDateTime = (isoString) => {
+    if (!isoString) return 'N/A';
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
 
   const fetchData = async () => {
     if (!user) return;
@@ -88,7 +134,7 @@ export default function StaffDashboard() {
       const manualAssignmentsMap = {};
       if (assignments) {
         assignments.forEach(a => {
-          if (a.shifts && a.shifts.date >= todayStr) {
+          if (a.shifts && a.shifts.date) {
              manualAssignmentsMap[a.shifts.date] = {
                shifts: {
                  locations: a.shifts.locations,
@@ -144,6 +190,53 @@ export default function StaffDashboard() {
       
       setUpcomingShift(foundUpcoming);
 
+      // Compute Weekly Shifts Snapshot (Sun to Sat of current week)
+      const now = new Date();
+      const sun = new Date(now);
+      sun.setDate(now.getDate() - now.getDay());
+
+      const weekDays = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(sun);
+        d.setDate(sun.getDate() + i);
+        const dateStr = formatLocalDateStr(d);
+        const isToday = dateStr === todayStr;
+
+        let dayStatus = 'OFF';
+        let shiftTimeStr = '';
+        let clinicName = primaryClinicName;
+
+        if (isTimeOffDay(dateStr)) {
+          dayStatus = 'TIME_OFF';
+        } else if (manualAssignmentsMap[dateStr]) {
+          const ass = manualAssignmentsMap[dateStr];
+          dayStatus = 'WORKING';
+          clinicName = ass.shifts?.locations?.name || primaryClinicName;
+          if (ass.shifts?.start_time && ass.shifts?.end_time) {
+            shiftTimeStr = `${formatTime(ass.shifts.start_time)} - ${formatTime(ass.shifts.end_time)}`;
+          }
+        } else if (pattern && pattern.length === 14) {
+          const cycleIdx = getCycleDayIndex(d);
+          const val = pattern[cycleIdx];
+          if (val !== false && val !== null && val !== undefined) {
+            dayStatus = 'WORKING';
+            shiftTimeStr = typeof val === 'string' ? val : (profile?.shift_time || '09:00 - 17:30');
+          }
+        }
+
+        weekDays.push({
+          dateStr,
+          dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          dateNum: d.getDate(),
+          monthName: d.toLocaleDateString('en-US', { month: 'short' }),
+          isToday,
+          dayStatus,
+          shiftTimeStr,
+          clinicName
+        });
+      }
+      setWeeklyShifts(weekDays);
+
       // Fetch recent time off requests
       const { data: requests } = await supabase
         .from('time_off_requests')
@@ -161,13 +254,14 @@ export default function StaffDashboard() {
           .select('*')
           .eq('action_type', 'SCHEDULE_CHANGE')
           .order('created_at', { ascending: false })
-          .limit(20);
+          .limit(25);
 
         if (dbLogs) {
           dbLogs.forEach(log => {
             if (log.metadata && (log.metadata.userId === user.id || log.metadata.user_id === user.id)) {
+              const uniqueId = `db_${log.id}`;
               notifList.push({
-                id: log.id,
+                id: uniqueId,
                 message: log.metadata.message || `Schedule change for ${log.metadata.dateStr}`,
                 dateStr: log.metadata.dateStr,
                 action: log.metadata.action,
@@ -182,14 +276,18 @@ export default function StaffDashboard() {
       try {
         const localNotifs = JSON.parse(localStorage.getItem(`notifs_${user.id}`) || '[]');
         localNotifs.forEach(ln => {
+          const uniqueId = ln.id || `local_${ln.dateStr}_${ln.action}_${ln.timestamp}`;
           if (!notifList.some(n => n.dateStr === ln.dateStr && n.action === ln.action && n.shiftCustomId === ln.shiftCustomId)) {
-            notifList.push(ln);
+            notifList.push({
+              ...ln,
+              id: uniqueId
+            });
           }
         });
       } catch(e) {}
 
       notifList.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-      setNotifications(notifList.slice(0, 6));
+      setNotifications(notifList);
 
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
@@ -234,6 +332,8 @@ export default function StaffDashboard() {
       default: return 'hourglass_empty';
     }
   };
+
+  const unreadNotifications = notifications.filter(n => !readNotifsMap[n.id]);
 
   return (
     <Layout>
@@ -287,28 +387,105 @@ export default function StaffDashboard() {
             <div className="absolute right-0 bottom-0 translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors"></div>
           </section>
 
+          {/* Weekly Schedule Snapshot Card */}
+          <section className="bg-white border border-surface-border rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600 text-xl">date_range</span>
+                <h3 className="font-h3 text-h3 text-slate-900">Weekly Schedule Snapshot</h3>
+              </div>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                {weeklyShifts.length > 0 ? `${weeklyShifts[0].monthName} ${weeklyShifts[0].dateNum} – ${weeklyShifts[6].monthName} ${weeklyShifts[6].dateNum}` : 'Current Week'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {weeklyShifts.map((day, idx) => {
+                const isWork = day.dayStatus === 'WORKING';
+                const isTimeOff = day.dayStatus === 'TIME_OFF';
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => navigate(`/my-schedule?date=${day.dateStr}`)}
+                    className={`flex flex-col items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer min-h-[95px] ${
+                      day.isToday 
+                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 shadow-xs' 
+                        : isWork 
+                          ? 'bg-slate-50 border-slate-200 hover:border-blue-300' 
+                          : isTimeOff
+                            ? 'bg-amber-50 border-amber-200'
+                            : 'bg-slate-50/50 border-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <span className={`text-[11px] font-bold block uppercase ${day.isToday ? 'text-blue-700' : 'text-slate-500'}`}>
+                        {day.dayName}
+                      </span>
+                      <span className={`text-base font-extrabold ${day.isToday ? 'text-blue-900' : 'text-slate-800'}`}>
+                        {day.dateNum}
+                      </span>
+                    </div>
+
+                    <div className="w-full text-center mt-1">
+                      {isWork ? (
+                        <div className="space-y-0.5">
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 uppercase tracking-tight w-full truncate">
+                            {day.shiftTimeStr || 'Scheduled'}
+                          </span>
+                        </div>
+                      ) : isTimeOff ? (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 uppercase tracking-tight">
+                          Time Off
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase">OFF</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
           {/* Schedule Change Notifications Card */}
           <section className="bg-white border border-surface-border rounded-xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-surface-border flex items-center justify-between bg-amber-50/50">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-600 text-xl">notifications</span>
                 <h3 className="font-h3 text-h3 text-slate-900">Schedule Updates & Notifications</h3>
+                {unreadNotifications.length > 0 && (
+                  <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {unreadNotifications.length} NEW
+                  </span>
+                )}
               </div>
-              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Live Updates</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAllNotifsModal(true)}
+                  className="px-3 py-1.5 bg-white border border-slate-300 hover:border-amber-400 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-sm text-slate-500">history</span>
+                  View All Notifications ({notifications.length})
+                </button>
+              </div>
             </div>
+
             <div className="divide-y divide-surface-border">
               {loading ? (
                 <div className="p-6 text-slate-500 text-center">Loading notifications...</div>
-              ) : notifications.length === 0 ? (
-                <div className="p-6 text-slate-400 text-center text-sm italic">
-                  No recent schedule updates. Any live changes to your published schedule will appear here.
+              ) : unreadNotifications.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50/50 text-slate-500 rounded-b-xl flex flex-col items-center justify-center gap-1">
+                  <span className="material-symbols-outlined text-emerald-500 text-3xl mb-1">task_alt</span>
+                  <p className="font-bold text-sm text-slate-800">No unread notifications</p>
+                  <p className="text-xs text-slate-400">All live schedule changes have been reviewed. Click "View All Notifications" to view your historical log.</p>
                 </div>
               ) : (
-                notifications.map(notif => (
+                unreadNotifications.map(notif => (
                   <div 
                     key={notif.id}
-                    onClick={() => navigate(`/my-schedule?date=${notif.dateStr}`)}
-                    className="p-5 flex items-center justify-between hover:bg-amber-50/30 transition-colors cursor-pointer group"
+                    onClick={() => handleNotificationClick(notif)}
+                    className="p-5 flex items-center justify-between hover:bg-amber-50/40 transition-colors cursor-pointer group"
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -321,19 +498,33 @@ export default function StaffDashboard() {
                         </span>
                       </div>
                       <div>
-                        <p className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">
-                          {notif.message}
-                        </p>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {notif.message}
+                          </p>
+                          <span className="bg-amber-100 text-amber-900 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Unread</span>
+                        </div>
+                        <div className="text-xs text-slate-500 font-medium mt-1 flex flex-wrap items-center gap-3">
                           <span>Target Date: <strong className="text-slate-700">{formatDate(notif.dateStr)}</strong></span>
                           <span>&bull;</span>
-                          <span>{new Date(notif.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                        </p>
+                          <span className="text-slate-500">Created: <strong className="text-slate-700">{formatDateTime(notif.timestamp)}</strong></span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
-                      <span className="text-xs font-bold">View Shift</span>
-                      <span className="material-symbols-outlined text-sm">chevron_right</span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => handleMarkAsRead(notif.id, e)}
+                        className="px-2.5 py-1 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold rounded-lg transition-colors shadow-2xs"
+                        title="Mark as read without opening"
+                      >
+                        Mark Read
+                      </button>
+                      <div className="flex items-center gap-1 text-slate-400 group-hover:text-blue-600 transition-colors ml-2">
+                        <span className="text-xs font-bold">View Shift</span>
+                        <span className="material-symbols-outlined text-sm">chevron_right</span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -434,6 +625,122 @@ export default function StaffDashboard() {
           onSuccess={fetchData}
           userId={user.id}
         />
+      )}
+
+      {/* View All Notifications History & Compliance Log Modal */}
+      {showAllNotifsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-amber-400 text-2xl">history_toggle_off</span>
+                <div>
+                  <h3 className="font-bold text-base text-white">Notifications Log & Compliance Record</h3>
+                  <p className="text-xs text-slate-400">Complete audit trail of creation and read timestamps</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {unreadNotifications.length > 0 && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs"
+                  >
+                    Mark All as Read
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAllNotifsModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notification History List */}
+            <div className="p-4 overflow-y-auto flex-1 divide-y divide-slate-100 text-xs">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 italic">No notifications on record.</div>
+              ) : (
+                notifications.map(notif => {
+                  const readTime = readNotifsMap[notif.id];
+                  const isRead = !!readTime;
+
+                  return (
+                    <div key={notif.id} className="py-4.5 px-3 hover:bg-slate-50 rounded-lg transition-colors flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                          notif.action === 'UNASSIGNED' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          <span className="material-symbols-outlined text-[18px]">
+                            {notif.action === 'UNASSIGNED' ? 'event_busy' : 'event_available'}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-bold text-slate-900 text-xs">{notif.message}</p>
+                          <p className="text-slate-500 font-medium">Target Date: <strong className="text-slate-700">{formatDate(notif.dateStr)}</strong></p>
+                          
+                          {/* Compliance Timestamps */}
+                          <div className="pt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono">
+                            <span className="text-slate-600 flex items-center gap-1">
+                              <span className="font-sans font-bold text-slate-400 uppercase text-[9px]">Created:</span> 
+                              {formatDateTime(notif.timestamp)}
+                            </span>
+                            <span className="text-slate-300">|</span>
+                            {isRead ? (
+                              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
+                                <span className="font-sans font-bold text-slate-400 uppercase text-[9px]">Read:</span> 
+                                {formatDateTime(readTime)}
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 font-bold flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                <span className="font-sans font-bold text-amber-800 uppercase text-[9px]">Status:</span> UNREAD
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {!isRead && (
+                          <button
+                            onClick={(e) => handleMarkAsRead(notif.id, e)}
+                            className="px-2.5 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 rounded font-bold transition-colors"
+                          >
+                            Mark Read
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setShowAllNotifsModal(false);
+                            handleNotificationClick(notif);
+                          }}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded font-bold transition-colors flex items-center gap-1"
+                        >
+                          View Shift
+                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowAllNotifsModal(false)}
+                className="px-4 py-1.5 bg-slate-800 text-white font-bold text-xs rounded-lg hover:bg-slate-900 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );
