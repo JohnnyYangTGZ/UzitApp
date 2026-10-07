@@ -162,18 +162,42 @@ export default function StaffSchedule() {
 
   useEffect(() => {
     if (!user) return;
-    const startDateStr = monthStart.toISOString().split('T')[0];
-    const endDateStr = monthEnd.toISOString().split('T')[0];
     
-    fetchMySchedule(user.id, startDateStr, endDateStr).then(data => {
-      setShifts(data || []);
-    });
-    
-    fetchTimeOffs();
-    fetchAvailabilities();
-    fetchPublications();
-    fetchUsers();
-    fetchAuditLogs();
+    const loadAllData = () => {
+      const startDateStr = monthStart.toISOString().split('T')[0];
+      const endDateStr = monthEnd.toISOString().split('T')[0];
+      
+      fetchMySchedule(user.id, startDateStr, endDateStr).then(data => {
+        setShifts(data || []);
+      });
+      
+      fetchTimeOffs();
+      fetchAvailabilities();
+      fetchPublications();
+      fetchUsers();
+      fetchAuditLogs();
+    };
+
+    loadAllData();
+
+    // 1. Supabase Realtime Subscription (Instant WebSocket pushes)
+    const channel = supabase
+      .channel(`staff_schedule_realtime_${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assigned_shifts' }, loadAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_publications' }, loadAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_logs' }, loadAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_off_requests' }, loadAllData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_availability' }, loadAllData)
+      .subscribe();
+
+    // 2. Tab Focus listener (auto-refreshes if employee switches back to tab)
+    const handleFocus = () => loadAllData();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [user, currentDate, fetchMySchedule]);
 
   const formatTime = (timeStr) => {

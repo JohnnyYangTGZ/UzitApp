@@ -297,7 +297,26 @@ export default function StaffDashboard() {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchData();
+
+    // 1. Supabase Realtime Subscription (Instant WebSocket updates when manager changes schedule)
+    const channel = supabase
+      .channel(`staff_dashboard_realtime_${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assigned_shifts' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_publications' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_logs' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_off_requests' }, fetchData)
+      .subscribe();
+
+    // 2. Tab Focus listener (auto-refreshes if employee switches back to tab)
+    const handleFocus = () => fetchData();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [user]);
 
   // Formatting helpers
