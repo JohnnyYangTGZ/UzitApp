@@ -164,9 +164,13 @@ export default function ManagerEmployees() {
 
     const loadEmployeeData = async () => {
       const today = new Date();
-      const startDateStr = formatLocalDateStr(today);
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + 13);
+      const dayOfWeek = today.getDay();
+      const sunday = new Date(today);
+      sunday.setDate(today.getDate() - dayOfWeek);
+
+      const startDateStr = formatLocalDateStr(sunday);
+      const endDate = new Date(sunday);
+      endDate.setDate(sunday.getDate() + 13);
       const endDateStr = formatLocalDateStr(endDate);
       
       // Fetch shifts for next 14 days
@@ -261,13 +265,20 @@ export default function ManagerEmployees() {
     ? employees 
     : employees.filter(e => e.staffing_role === roleFilter);
 
-  // Helper to generate next 14 days
+  // Helper to generate 14 days starting from current week's Sunday
   const getNext14Days = () => {
     const days = [];
     const today = new Date();
+    const todayStr = formatLocalDateStr(today);
+
+    // Start on Sunday of current week (0 = Sunday)
+    const dayOfWeek = today.getDay();
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek);
+
     for (let i = 0; i < 14; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
+      const date = new Date(sunday);
+      date.setDate(sunday.getDate() + i);
       const dateStr = formatLocalDateStr(date);
       
       // Check if scheduled
@@ -276,10 +287,12 @@ export default function ManagerEmployees() {
       const absenceRecord = absences.find(a => a.date === dateStr);
       
       days.push({
+        dateStr,
         name: date.toLocaleDateString('en-US', { weekday: 'short' }),
         date: date.getDate(),
         isWorking,
-        absence: absenceRecord ? absenceRecord.absence_type : null
+        absence: absenceRecord ? absenceRecord.absence_type : null,
+        isToday: dateStr === todayStr
       });
     }
     return days;
@@ -483,10 +496,14 @@ export default function ManagerEmployees() {
                               dotClass = 'hidden';
                             }
                             
+                            if (day.isToday) {
+                              cellBg += ' ring-2 ring-blue-500 shadow-xs';
+                            }
+
                             return (
                               <div key={idx} className={`flex flex-col items-center justify-center p-2 rounded-lg border min-h-[70px] ${cellBg}`} title={day.absence || (day.isWorking ? 'Working' : 'Off')}>
-                                <span className="text-[10px] font-semibold text-slate-500">{day.name}</span>
-                                <span className={`text-base font-bold ${textClass}`}>{day.date}</span>
+                                <span className={`text-[10px] font-bold ${day.isToday ? 'text-blue-800 uppercase' : 'text-slate-500'}`}>{day.name}</span>
+                                <span className={`text-base font-extrabold ${textClass}`}>{day.date}</span>
                                 <div className={`w-1.5 h-1.5 rounded-full mt-1 ${dotClass}`}></div>
                                 {day.absence && <span className="text-[9px] text-red-600 font-bold uppercase mt-0.5 truncate w-full text-center px-1" title={day.absence}>{day.absence.replace('Call', '').trim()}</span>}
                               </div>
