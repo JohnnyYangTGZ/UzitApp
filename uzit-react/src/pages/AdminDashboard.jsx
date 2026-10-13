@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useLocationContext } from '../context/LocationContext';
 import CreateRoleModal from '../components/CreateRoleModal';
 import CreateClinicModal from '../components/CreateClinicModal';
+import CreateDepartmentModal from '../components/CreateDepartmentModal';
 
 const ANCHOR_DATE = new Date(2025, 11, 14); // Sunday, Dec 14, 2025 (Start of a Week 1)
 function getCycleDayIndex(dateObj) {
@@ -23,7 +24,7 @@ function formatSelectedDateStr(dateStr) {
 }
 
 export default function AdminDashboard() {
-  const { clinics, selectedClinicId, setSelectedClinicId, loadingClinics } = useLocationContext();
+  const { clinics, selectedClinicId, setSelectedClinicId, loadingClinics, selectedDepartmentId } = useLocationContext();
   const navigate = useNavigate();
   
   const handleAddEmployee = () => {
@@ -66,6 +67,7 @@ export default function AdminDashboard() {
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
   const [headerDates, setHeaderDates] = useState([]);
   const [fullWeekDateStrs, setFullWeekDateStrs] = useState([]);
 
@@ -80,7 +82,52 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (!selectedClinicId) return;
+    // Always compute week header dates for the selectedDate
+    const targetParts = selectedDate.split('-').map(Number);
+    const targetDate = new Date(targetParts[0], targetParts[1] - 1, targetParts[2], 12, 0, 0);
+    const dayOfWeek = targetDate.getDay();
+    const sunday = new Date(targetDate);
+    sunday.setDate(targetDate.getDate() - dayOfWeek);
+
+    const weekDates = [];
+    const shortDates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const da = String(d.getDate()).padStart(2, '0');
+      weekDates.push(`${yr}-${mo}-${da}`);
+      shortDates.push(`${d.getMonth() + 1}/${d.getDate()}`);
+    }
+    setHeaderDates(shortDates);
+    setFullWeekDateStrs(weekDates);
+
+    if (!selectedClinicId) {
+      setCurrentDepartmentId(selectedDepartmentId || null);
+      setClinicDailyShiftCounts({
+        RN: [0, 0, 0, 0, 0, 0, 0],
+        LVN: [0, 0, 0, 0, 0, 0, 0],
+        MA: [0, 0, 0, 0, 0, 0, 0],
+        OTHER: [0, 0, 0, 0, 0, 0, 0]
+      });
+      setClinicActualShiftCounts({
+        RN: [0, 0, 0, 0, 0, 0, 0],
+        LVN: [0, 0, 0, 0, 0, 0, 0],
+        MA: [0, 0, 0, 0, 0, 0, 0],
+        OTHER: [0, 0, 0, 0, 0, 0, 0]
+      });
+      setClinicActualShifts({
+        RN: [[], [], [], [], [], [], []],
+        LVN: [[], [], [], [], [], [], []],
+        MA: [[], [], [], [], [], [], []],
+        OTHER: [[], [], [], [], [], [], []]
+      });
+      setStaffOff([]);
+      setStaffOnCall([]);
+      setLoadingStats(false);
+      return;
+    }
 
     async function loadClinicData() {
       setLoadingStats(true);
@@ -91,7 +138,7 @@ export default function AdminDashboard() {
         .eq('id', selectedClinicId)
         .single();
       
-      const departmentId = clinicData?.parent_location_id;
+      const departmentId = clinicData?.parent_location_id || selectedDepartmentId;
       setCurrentDepartmentId(departmentId);
 
       // 1. Department Employees Count
@@ -308,7 +355,7 @@ export default function AdminDashboard() {
     }
     
     loadClinicData();
-  }, [selectedClinicId, selectedDate]);
+  }, [selectedClinicId, selectedDepartmentId, selectedDate]);
 
   // Determine current date
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -525,6 +572,13 @@ export default function AdminDashboard() {
                 </div>
                 <span className="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
               </button>
+              <button onClick={() => setIsDepartmentModalOpen(true)} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors group">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined">corporate_fare</span>
+                  <span className="font-semibold text-sm">Create Department</span>
+                </div>
+                <span className="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+              </button>
               <button onClick={() => navigate('/settings')} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors group">
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined">settings</span>
@@ -625,13 +679,19 @@ export default function AdminDashboard() {
       <CreateRoleModal 
         isOpen={isRoleModalOpen} 
         onClose={() => setIsRoleModalOpen(false)} 
-        departmentId={currentDepartmentId}
+        departmentId={selectedDepartmentId || currentDepartmentId}
       />
       
       <CreateClinicModal 
         isOpen={isClinicModalOpen} 
         onClose={() => setIsClinicModalOpen(false)} 
-        departmentId={currentDepartmentId}
+        departmentId={selectedDepartmentId || currentDepartmentId}
+        onSuccess={() => window.location.reload()}
+      />
+
+      <CreateDepartmentModal 
+        isOpen={isDepartmentModalOpen} 
+        onClose={() => setIsDepartmentModalOpen(false)} 
         onSuccess={() => window.location.reload()}
       />
     </Layout>

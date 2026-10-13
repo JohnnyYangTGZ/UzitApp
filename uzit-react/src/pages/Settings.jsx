@@ -5,7 +5,7 @@ import { useLocationContext } from '../context/LocationContext';
 import CreateRoleModal from '../components/CreateRoleModal';
 
 export default function Settings() {
-  const { clinics, selectedClinicId, setSelectedClinicId } = useLocationContext();
+  const { clinics, selectedClinicId, setSelectedClinicId, selectedDepartmentId } = useLocationContext();
   
   const [clinicDetails, setClinicDetails] = useState({ name: '', code: '', parent_location_id: null });
   const [loading, setLoading] = useState(true);
@@ -19,33 +19,41 @@ export default function Settings() {
   const [roleToEdit, setRoleToEdit] = useState(null);
 
   useEffect(() => {
-    if (!selectedClinicId) return;
+    if (!selectedClinicId && !selectedDepartmentId) return;
 
     async function loadSettings() {
       setLoading(true);
       
-      // Load Clinic Details
-      const { data: clinicData } = await supabase
-        .from('locations')
-        .select('*')
-        .eq('id', selectedClinicId)
-        .single();
-        
-      if (clinicData) {
-        setClinicDetails({ name: clinicData.name, code: clinicData.code || '', parent_location_id: clinicData.parent_location_id });
+      let deptId = selectedDepartmentId;
+
+      // Load Clinic Details if a clinic is selected
+      if (selectedClinicId && selectedClinicId !== 'ALL') {
+        const { data: clinicData } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('id', selectedClinicId)
+          .single();
+          
+        if (clinicData) {
+          setClinicDetails({ name: clinicData.name, code: clinicData.code || '', parent_location_id: clinicData.parent_location_id });
+          deptId = clinicData.parent_location_id || selectedDepartmentId;
+        }
+      } else {
+        setClinicDetails({ name: 'No Clinic Selected', code: '', parent_location_id: selectedDepartmentId });
       }
 
       // Load Department Roles
-      const deptId = clinicData?.parent_location_id || selectedClinicId;
-      const { data: rolesData } = await supabase
-        .from('staffing_roles')
-        .select('*')
-        .eq('department_id', deptId)
-        .eq('is_active', true);
-        
-      const availableRoles = rolesData?.map(r => r.name) || ['RN', 'LVN', 'MA'];
-      setRoles(rolesData || []);
-
+      if (deptId) {
+        const { data: rolesData } = await supabase
+          .from('staffing_roles')
+          .select('*')
+          .eq('department_id', deptId)
+          .eq('is_active', true);
+          
+        setRoles(rolesData || []);
+      } else {
+        setRoles([]);
+      }
 
       // Load Time Off Types
       const { data: timeOffData } = await supabase
@@ -58,7 +66,7 @@ export default function Settings() {
     }
     
     loadSettings();
-  }, [selectedClinicId]);
+  }, [selectedClinicId, selectedDepartmentId]);
 
   const handleClinicUpdate = async (e) => {
     e.preventDefault();
@@ -299,7 +307,7 @@ export default function Settings() {
           // Quick hack to reload after modal closes to show new roles
           window.location.reload(); 
         }} 
-        departmentId={clinicDetails.parent_location_id || selectedClinicId}
+        departmentId={selectedDepartmentId || clinicDetails.parent_location_id || selectedClinicId}
         roleToEdit={roleToEdit}
       />
     </Layout>

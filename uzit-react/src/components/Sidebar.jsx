@@ -118,7 +118,10 @@ export default function Sidebar() {
               onChange={(e) => setSelectedClinicId(e.target.value)}
               className="w-full bg-white border border-slate-200 text-slate-900 font-bold py-3 px-4 rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm cursor-pointer"
             >
-              {location.pathname === '/manager/calendar' && (
+              {clinics.length === 0 && (
+                <option value="">No Clinics Yet</option>
+              )}
+              {clinics.length > 0 && location.pathname === '/manager/calendar' && (
                 <option value="ALL">All Clinics</option>
               )}
               {clinics.map(clinic => (
