@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import { useLocationContext } from '../context/LocationContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import SearchableSelect from '../components/SearchableSelect';
 const formatTimeStr = (t) => {
   if (!t) return '';
   const [h, m] = t.split(':');
@@ -14,7 +15,7 @@ const formatTimeStr = (t) => {
 };
 
 export default function ManagerCalendar() {
-  const { clinics, selectedClinicId, setSelectedClinicId } = useLocationContext();
+  const { clinics, selectedClinicId, setSelectedClinicId, selectedDepartmentId } = useLocationContext();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   
@@ -28,12 +29,17 @@ export default function ManagerCalendar() {
   
   const [profiles, setProfiles] = useState([]);
   const [departmentProfiles, setDepartmentProfiles] = useState([]);
+  const [departmentRoles, setDepartmentRoles] = useState([]);
   const [timeOffs, setTimeOffs] = useState([]);
   const [availabilities, setAvailabilities] = useState([]);
   const [assignedShifts, setAssignedShifts] = useState([]);
   const [timeOffTypes, setTimeOffTypes] = useState([]);
   const [staffTypeFilter, setStaffTypeFilter] = useState('All Staff');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    setStaffTypeFilter('All Staff');
+  }, [selectedDepartmentId]);
 
   // Menu State
   const [activeDateMenu, setActiveDateMenu] = useState(null);
@@ -68,7 +74,16 @@ export default function ManagerCalendar() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
-    if (!selectedClinicId) return;
+    if (!selectedDepartmentId) {
+      setDepartmentProfiles([]);
+      setDepartmentRoles([]);
+      setProfiles([]);
+      setTimeOffs([]);
+      setAvailabilities([]);
+      setAssignedShifts([]);
+      setLoading(false);
+      return;
+    }
 
     async function fetchData() {
       setLoading(true);
@@ -80,40 +95,38 @@ export default function ManagerCalendar() {
       const minDateStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const maxDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      // 1. Get selected clinic details to find department_id
-      const targetClinicId = selectedClinicId === 'ALL' && clinics.length > 0 ? clinics[0].id : selectedClinicId;
-      const { data: clinicData } = await supabase
-        .from('locations')
-        .select('parent_location_id')
-        .eq('id', targetClinicId)
-        .single();
-      
-      const departmentId = clinicData?.parent_location_id;
-      let deptProfs = [];
+      // Fetch department roles
+      const { data: rolesData } = await supabase
+        .from('staffing_roles')
+        .select('name')
+        .eq('department_id', selectedDepartmentId)
+        .eq('is_active', true)
+        .order('name');
+      setDepartmentRoles((rolesData || []).map(r => r.name.toUpperCase().trim()));
 
-      if (departmentId) {
-        const { data: fetchedDeptProfs } = await supabase
-          .from('employee_profiles')
-          .select(`*, users:user_id ( id, name )`)
-          .eq('department_id', departmentId)
-          .eq('is_active', true)
-          .order('users(name)');
-        deptProfs = fetchedDeptProfs || [];
-        setDepartmentProfiles(deptProfs);
-      } else {
-        setDepartmentProfiles([]);
-      }
+      // 1. Fetch active employees strictly in the selected department
+      const { data: fetchedDeptProfs } = await supabase
+        .from('employee_profiles')
+        .select(`*, users:user_id ( id, name )`)
+        .eq('department_id', selectedDepartmentId)
+        .eq('is_active', true)
+        .order('users(name)');
+      const deptProfs = fetchedDeptProfs || [];
+      setDepartmentProfiles(deptProfs);
 
-      // 2. Fetch users for this clinic (or all if ALL is selected)
+      // 2. Fetch users for this clinic (or all in department if ALL or no clinic is selected)
       let userIds = [];
-      if (selectedClinicId === 'ALL') {
+      if (!selectedClinicId || selectedClinicId === 'ALL') {
         userIds = deptProfs.map(dp => dp.user_id);
       } else {
         const { data: clinicUsers } = await supabase
           .from('employee_clinics')
           .select('user_id')
           .eq('clinic_id', selectedClinicId);
-        userIds = (clinicUsers || []).map(cu => cu.user_id);
+        const deptUserIdSet = new Set(deptProfs.map(dp => dp.user_id));
+        userIds = (clinicUsers || [])
+          .map(cu => cu.user_id)
+          .filter(id => deptUserIdSet.has(id));
       }
 
       // 3. Fetch profiles
@@ -121,7 +134,8 @@ export default function ManagerCalendar() {
         const { data: profs } = await supabase
           .from('employee_profiles')
           .select(`*, users:user_id ( id, name )`)
-          .in('user_id', userIds)
+          .eq('department_id', selectedDepartmentId)
+          .in('user_id', userIds);
         const schedulableProfs = (profs || []).filter(p => {
           const role = (p.staffing_role || p.job_title || '').toUpperCase();
           return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
@@ -175,7 +189,7 @@ export default function ManagerCalendar() {
       setLoading(false);
     }
     fetchData();
-  }, [selectedClinicId, currentMonth, refreshTrigger]);
+  }, [selectedDepartmentId, selectedClinicId, clinics, currentMonth, refreshTrigger]);
 
   useEffect(() => {
     if (startDate !== endDate) {
@@ -654,7 +668,11 @@ export default function ManagerCalendar() {
     return roleColors[role] || 'bg-slate-100 text-slate-800 border-slate-200';
   };
 
-  const clinicName = selectedClinicId === 'ALL' ? 'All Clinics' : clinics.find(c => c.id === selectedClinicId)?.name || 'Loading...';
+  const clinicName = clinics.length === 0
+    ? 'No Clinics Yet'
+    : selectedClinicId === 'ALL'
+      ? 'All Clinics'
+      : clinics.find(c => c.id === selectedClinicId)?.name || 'Loading...';
   const monthName = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
@@ -686,11 +704,9 @@ export default function ManagerCalendar() {
               className="bg-white border border-slate-200 text-slate-700 text-sm font-semibold py-2 px-3 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-sm"
             >
               <option value="All Staff">All Staff</option>
-              <option value="RN">RN</option>
-              <option value="LVN">LVN</option>
-              <option value="MA">MA</option>
-              <option value="MD">MD</option>
-              <option value="DO">DO</option>
+              {departmentRoles.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
             </select>
 
             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
@@ -1056,7 +1072,7 @@ export default function ManagerCalendar() {
                   <SearchableSelect 
                     options={departmentProfiles.map(p => ({
                       value: p.user_id,
-                      label: `${p.users?.name} (${p.staffing_role})`
+                      label: `${p.users?.name || 'Staff Member'} (${p.staffing_role || 'Staff'})`
                     }))}
                     value={selectedEmployee} 
                     onChange={setSelectedEmployee}
@@ -1194,7 +1210,7 @@ export default function ManagerCalendar() {
                   <SearchableSelect 
                     options={departmentProfiles.map(p => ({
                       value: p.user_id,
-                      label: `${p.users?.name} (${p.staffing_role})`
+                      label: `${p.users?.name || 'Staff Member'} (${p.staffing_role || 'Staff'})`
                     }))}
                     value={selectedEmployee} 
                     onChange={setSelectedEmployee}

@@ -74,7 +74,7 @@ const getTypeCodeLabel = (code) => {
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
-  const { clinics, selectedClinicId } = useLocationContext();
+  const { clinics, selectedClinicId, selectedDepartmentId } = useLocationContext();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
@@ -87,6 +87,7 @@ export default function ManagerDashboard() {
   const [denyModalRequest, setDenyModalRequest] = useState(null);
   const [denyNote, setDenyNote] = useState('');
   const [isSubmittingDenial, setIsSubmittingDenial] = useState(false);
+  const [departmentRoles, setDepartmentRoles] = useState([]);
   const [dashboardData, setDashboardData] = useState({ weeklyCoverage: [], rosterByDay: {} });
 
   useEffect(() => {
@@ -96,17 +97,44 @@ export default function ManagerDashboard() {
   }, []);
 
   const fetchPendingRequests = async () => {
-    if (!selectedClinicId) return;
+    if (!selectedClinicId || !selectedDepartmentId) {
+      setPendingRequests([]);
+      setLoadingRequests(false);
+      return;
+    }
     setLoadingRequests(true);
 
     try {
+      const deptClinicIds = clinics.map(c => c.id);
+      if (selectedClinicId === 'ALL' && deptClinicIds.length === 0) {
+        setPendingRequests([]);
+        setLoadingRequests(false);
+        return;
+      }
+
       let clinicUsersQuery = supabase.from('employee_clinics').select('user_id');
       if (selectedClinicId !== 'ALL') {
         clinicUsersQuery = clinicUsersQuery.eq('clinic_id', selectedClinicId);
+      } else {
+        clinicUsersQuery = clinicUsersQuery.in('clinic_id', deptClinicIds);
       }
       const { data: clinicUsers } = await clinicUsersQuery;
 
-      const userIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
+      const clinicUserIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
+      if (clinicUserIds.length === 0) {
+        setPendingRequests([]);
+        setLoadingRequests(false);
+        return;
+      }
+
+      // Filter strictly to employees belonging to selectedDepartmentId
+      const { data: deptProfiles } = await supabase
+        .from('employee_profiles')
+        .select('user_id')
+        .eq('department_id', selectedDepartmentId)
+        .in('user_id', clinicUserIds);
+
+      const userIds = (deptProfiles || []).map(p => p.user_id);
       if (userIds.length === 0) {
         setPendingRequests([]);
         setLoadingRequests(false);
@@ -143,7 +171,7 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     fetchPendingRequests();
-  }, [selectedClinicId, clinics]);
+  }, [selectedClinicId, selectedDepartmentId, clinics]);
 
   const updateTimeOffRequestStatus = async (requestId, updates) => {
     const { error: updateErr } = await supabase
@@ -224,54 +252,99 @@ export default function ManagerDashboard() {
   };
 
   useEffect(() => {
+    setSelectedRoleFilter('All Staff');
+  }, [selectedDepartmentId]);
+
+  useEffect(() => {
     async function fetchData() {
-      if (!selectedClinicId) return;
+      const curr = new Date();
+      const first = curr.getDate() - curr.getDay() + (weekOffset * 7); 
+      const Sunday = new Date(curr.setDate(first));
+      
+      const weekDates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(Sunday);
+        d.setDate(Sunday.getDate() + i);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return {
+          date: d,
+          dateStr: `${y}-${m}-${day}`,
+          dayOfWeek: d.getDay(),
+          cycleIndex: getCycleDayIndex(d)
+        };
+      });
+
+      let rolesList = [];
+      if (selectedDepartmentId) {
+        const { data: rolesData } = await supabase
+          .from('staffing_roles')
+          .select('name')
+          .eq('department_id', selectedDepartmentId)
+          .eq('is_active', true)
+          .order('name');
+        rolesList = (rolesData || []).map(r => r.name.toUpperCase().trim());
+      }
+      setDepartmentRoles(rolesList);
+
+      if (!selectedClinicId || !selectedDepartmentId || (selectedClinicId === 'ALL' && clinics.length === 0)) {
+        const emptyCoverage = weekDates.map(dayData => {
+          const reqObj = { total: 0 };
+          const actObj = { total: 0 };
+          rolesList.forEach(r => {
+            reqObj[r] = 0;
+            actObj[r] = 0;
+          });
+          return {
+            date: dayData.date,
+            dateStr: dayData.dateStr,
+            required: reqObj,
+            actual: actObj,
+            gap: false
+          };
+        });
+        setDashboardData({
+          weeklyCoverage: emptyCoverage,
+          rosterByDay: {}
+        });
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
       try {
-        const curr = new Date();
-        const first = curr.getDate() - curr.getDay() + (weekOffset * 7); 
-        const Sunday = new Date(curr.setDate(first));
-        
-        const weekDates = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(Sunday);
-          d.setDate(Sunday.getDate() + i);
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return {
-            date: d,
-            dateStr: `${y}-${m}-${day}`,
-            dayOfWeek: d.getDay(),
-            cycleIndex: getCycleDayIndex(d)
-          };
-        });
-
         const minDateStr = weekDates[0].dateStr;
         const maxDateStr = weekDates[6].dateStr;
+        const deptClinicIds = clinics.map(c => c.id);
 
         let clinicUsersQuery = supabase.from('employee_clinics').select('user_id');
         if (selectedClinicId !== 'ALL') {
           clinicUsersQuery = clinicUsersQuery.eq('clinic_id', selectedClinicId);
+        } else {
+          clinicUsersQuery = clinicUsersQuery.in('clinic_id', deptClinicIds);
         }
         const { data: clinicUsers } = await clinicUsersQuery;
         
-        const userIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
+        const rawUserIds = Array.from(new Set((clinicUsers || []).map(cu => cu.user_id)));
 
         let profiles = [];
-        if (userIds.length > 0) {
+        if (rawUserIds.length > 0) {
           const { data: profs } = await supabase
             .from('employee_profiles')
             .select(`
               *,
               users:user_id ( id, name )
             `)
-            .in('user_id', userIds);
+            .eq('department_id', selectedDepartmentId)
+            .in('user_id', rawUserIds);
           profiles = (profs || []).filter(p => {
             const role = (p.staffing_role || p.job_title || '').toUpperCase();
             return !role.includes('ADMIN') && !role.includes('MANAGER') && !role.includes('SYSTEM ADMINISTRATOR');
           });
         }
+
+        const userIds = profiles.map(p => p.user_id);
 
         let timeOffs = [];
         if (userIds.length > 0) {
@@ -288,6 +361,8 @@ export default function ManagerDashboard() {
         let reqsQuery = supabase.from('coverage_requirements').select('*');
         if (selectedClinicId !== 'ALL') {
           reqsQuery = reqsQuery.eq('location_id', selectedClinicId);
+        } else {
+          reqsQuery = reqsQuery.in('location_id', deptClinicIds);
         }
         const { data: reqs } = await reqsQuery;
 
@@ -295,8 +370,12 @@ export default function ManagerDashboard() {
         let rosterByDay = {};
 
         weekDates.forEach((dayData, index) => {
-          let required = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
-          let actual = { RN: 0, LVN: 0, MA: 0, OTHER: 0, total: 0 };
+          let required = { total: 0 };
+          let actual = { total: 0 };
+          rolesList.forEach(r => {
+            required[r] = 0;
+            actual[r] = 0;
+          });
           let workingStaff = [];
           
           (reqs || []).forEach(req => {
@@ -305,8 +384,7 @@ export default function ManagerDashboard() {
               const dayVal = pattern[dayData.cycleIndex];
               if (dayVal !== false && dayVal !== null && dayVal !== undefined) {
                 let role = req.staffing_role?.toUpperCase().trim() || 'OTHER';
-                if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
-                required[role] += (req.required_count || 1);
+                required[role] = (required[role] || 0) + (req.required_count || 1);
                 required.total += (req.required_count || 1);
               }
             }
@@ -321,7 +399,6 @@ export default function ManagerDashboard() {
                 const partialOff = timeOffs.find(to => to.user_id === prof.user_id && to.start_date <= dayData.dateStr && to.end_date >= dayData.dateStr && (to.start_time || to.end_time));
                 
                 let role = prof.staffing_role?.toUpperCase().trim() || 'OTHER';
-                if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
                 
                 const effectiveShiftTime = typeof dayVal === 'string' ? dayVal : prof.shift_time;
 
@@ -335,14 +412,14 @@ export default function ManagerDashboard() {
                 });
               
                 if (!isFullOff) {
-                  actual[role] += 1;
+                  actual[role] = (actual[role] || 0) + 1;
                   actual.total += 1;
                 }
               }
             }
           });
           
-          const gap = required.RN > actual.RN || required.LVN > actual.LVN || required.MA > actual.MA;
+          const gap = rolesList.some(r => (required[r] || 0) > (actual[r] || 0));
           
           weeklyCoverage.push({
             date: dayData.date,
@@ -373,11 +450,13 @@ export default function ManagerDashboard() {
       }
     }
     fetchData();
-  }, [selectedClinicId, weekOffset]);
+  }, [selectedClinicId, selectedDepartmentId, clinics, weekOffset]);
 
-  const clinicName = selectedClinicId === 'ALL'
-    ? 'All Clinics'
-    : clinics.find(c => c.id === selectedClinicId)?.name || 'Loading Clinic...';
+  const clinicName = !selectedClinicId
+    ? 'No Clinics Yet'
+    : selectedClinicId === 'ALL'
+      ? 'All Clinics'
+      : clinics.find(c => c.id === selectedClinicId)?.name || 'Loading Clinic...';
   const currentRoster = dashboardData.rosterByDay[selectedDayIndex] || [];
   const selectedDate = dashboardData.weeklyCoverage?.[selectedDayIndex]?.date;
   
@@ -595,111 +674,117 @@ export default function ManagerDashboard() {
                   </div>
 
                   {/* Staffing Roles Breakdown Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                    {['RN', 'LVN', 'MA'].map(role => {
-                      const actualCount = day.actual[role] || 0;
-                      const requiredCount = day.required[role] || 0;
-                      const isDeficit = actualCount < requiredCount;
-                      const isOpen = activeDropdown?.dayIdx === selectedDayIndex && activeDropdown?.role === role;
+                  {departmentRoles.length === 0 ? (
+                    <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center text-xs text-slate-500 mb-4">
+                      No staffing roles or shift requirements configured for this department yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                      {departmentRoles.map(role => {
+                        const actualCount = day.actual[role] || 0;
+                        const requiredCount = day.required[role] || 0;
+                        const isDeficit = actualCount < requiredCount;
+                        const isOpen = activeDropdown?.dayIdx === selectedDayIndex && activeDropdown?.role === role;
 
-                      const roleStaff = (dashboardData.rosterByDay[selectedDayIndex] || []).filter(st => {
-                        if (st.isOff) return false;
-                        const r = (st.staffing_role || '').toUpperCase().trim();
-                        if (role === 'RN') return r === 'RN' || r === 'REGISTERED NURSE';
-                        if (role === 'LVN') return r === 'LVN' || r === 'LICENSED VOCATIONAL NURSE';
-                        if (role === 'MA') return r === 'MA' || r === 'MEDICAL ASSISTANT';
-                        return r === role;
-                      });
+                        const roleStaff = (dashboardData.rosterByDay[selectedDayIndex] || []).filter(st => {
+                          if (st.isOff) return false;
+                          const r = (st.staffing_role || '').toUpperCase().trim();
+                          if (role === 'RN') return r === 'RN' || r === 'REGISTERED NURSE';
+                          if (role === 'LVN') return r === 'LVN' || r === 'LICENSED VOCATIONAL NURSE';
+                          if (role === 'MA') return r === 'MA' || r === 'MEDICAL ASSISTANT';
+                          return r === role;
+                        });
 
-                      return (
-                        <div 
-                          key={role} 
-                          className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all ${
-                            isDeficit ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{role}</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveDropdown(isOpen ? null : { dayIdx: selectedDayIndex, role });
-                              }}
-                              className={`px-2 py-0.5 rounded text-xs font-bold transition-all flex items-center gap-0.5 cursor-pointer ${
-                                isOpen ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-400' : 'bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-700'
-                              } ${isDeficit ? 'text-rose-700' : 'text-emerald-700'}`}
-                            >
-                              <span>{actualCount}</span>
-                              <span className="text-[11px] font-normal text-slate-400">/ {requiredCount}</span>
-                              <span className="material-symbols-outlined text-[14px] text-slate-400">arrow_drop_down</span>
-                            </button>
-                          </div>
-
-                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
-                            <div 
-                              className={`h-full ${isDeficit ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                              style={{ width: `${requiredCount ? Math.min(100, (actualCount / requiredCount) * 100) : 100}%` }}
-                            ></div>
-                          </div>
-
-                          {/* Who's Working Dropdown Popover */}
-                          {isOpen && (
-                            <div 
-                              className="absolute right-0 top-10 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-3.5 space-y-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                <div>
-                                  <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                                    <span className="material-symbols-outlined text-sm text-blue-600">group</span>
-                                    Who's Working Today
-                                  </h4>
-                                  <p className="text-[10px] text-slate-500 font-medium">
-                                    {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {role} ({roleStaff.length})
-                                  </p>
-                                </div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveDropdown(null);
-                                  }}
-                                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">close</span>
-                                </button>
-                              </div>
-
-                              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
-                                {roleStaff.length > 0 ? (
-                                  roleStaff.map((st, i) => (
-                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
-                                      <div className="flex items-center gap-2 truncate">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                                          {st.users?.name?.charAt(0) || '?'}
-                                        </div>
-                                        <div className="truncate">
-                                          <p className="font-bold text-slate-800 truncate">{st.users?.name || 'Staff'}</p>
-                                          <p className="text-[10px] text-slate-500 truncate">{st.effectiveShiftTime || 'Scheduled'}</p>
-                                        </div>
-                                      </div>
-                                      <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                        {role}
-                                      </span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="p-3 text-center text-slate-400 text-xs italic">
-                                    No {role} staff scheduled for this date.
-                                  </div>
-                                )}
-                              </div>
+                        return (
+                          <div 
+                            key={role} 
+                            className={`relative p-3 rounded-xl border flex flex-col justify-between transition-all ${
+                              isDeficit ? 'bg-rose-50/50 border-rose-200' : 'bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{role}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveDropdown(isOpen ? null : { dayIdx: selectedDayIndex, role });
+                                }}
+                                className={`px-2 py-0.5 rounded text-xs font-bold transition-all flex items-center gap-0.5 cursor-pointer ${
+                                  isOpen ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-400' : 'bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-700'
+                                } ${isDeficit ? 'text-rose-700' : 'text-emerald-700'}`}
+                              >
+                                <span>{actualCount}</span>
+                                <span className="text-[11px] font-normal text-slate-400">/ {requiredCount}</span>
+                                <span className="material-symbols-outlined text-[14px] text-slate-400">arrow_drop_down</span>
+                              </button>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+
+                            <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                              <div 
+                                className={`h-full ${isDeficit ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                                style={{ width: `${requiredCount ? Math.min(100, (actualCount / requiredCount) * 100) : 100}%` }}
+                              ></div>
+                            </div>
+
+                            {/* Who's Working Dropdown Popover */}
+                            {isOpen && (
+                              <div 
+                                className="absolute right-0 top-10 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 p-3.5 space-y-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                  <div>
+                                    <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                      <span className="material-symbols-outlined text-sm text-blue-600">group</span>
+                                      Who's Working Today
+                                    </h4>
+                                    <p className="text-[10px] text-slate-500 font-medium">
+                                      {day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {role} ({roleStaff.length})
+                                    </p>
+                                  </div>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveDropdown(null);
+                                    }}
+                                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">close</span>
+                                  </button>
+                                </div>
+
+                                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                                  {roleStaff.length > 0 ? (
+                                    roleStaff.map((st, i) => (
+                                      <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                                        <div className="flex items-center gap-2 truncate">
+                                          <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                                            {st.users?.name?.charAt(0) || '?'}
+                                          </div>
+                                          <div className="truncate">
+                                            <p className="font-bold text-slate-800 truncate">{st.users?.name || 'Staff'}</p>
+                                            <p className="text-[10px] text-slate-500 truncate">{st.effectiveShiftTime || 'Scheduled'}</p>
+                                          </div>
+                                        </div>
+                                        <span className="text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                          {role}
+                                        </span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="p-3 text-center text-slate-400 text-xs italic">
+                                      No {role} staff scheduled for this date.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Progress Bar for Total Staffing */}
                   <div className="flex items-center justify-between text-xs text-slate-500 font-semibold mb-1">

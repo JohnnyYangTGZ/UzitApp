@@ -1418,7 +1418,11 @@ export default function Scheduler() {
     } else {
       setShifts([]);
       setEmployees([]);
+      setAvailableRoles([]);
       setWeeklyAssignments({});
+      setEmployeeAssignments({});
+      setWeeklyTimeOffData([]);
+      setWeeklyAvailabilityData([]);
       setWeekDates([]);
       setLoading(false);
     }

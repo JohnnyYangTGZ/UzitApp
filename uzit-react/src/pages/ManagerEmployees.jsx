@@ -143,11 +143,17 @@ export default function ManagerEmployees() {
       } else {
         setSelectedEmployee(sortedData.length > 0 ? sortedData[0] : null);
       }
+    } else {
+      setEmployees([]);
+      setSelectedEmployee(null);
     }
     setLoading(false);
   }
 
   useEffect(() => {
+    setEmployees([]);
+    setSelectedEmployee(null);
+    setRoleFilter('All');
     loadEmployees();
     loadRoles();
   }, [selectedDepartmentId]);

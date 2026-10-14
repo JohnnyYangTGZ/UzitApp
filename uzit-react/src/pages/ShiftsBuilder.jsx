@@ -39,7 +39,7 @@ export default function ShiftsBuilder() {
     customId: '',
     startTime: '08:00',
     endTime: '17:00',
-    staffingRole: 'RN',
+    staffingRole: '',
     isRequired: true,
     schedulePattern: DEFAULT_PATTERN
   });
@@ -47,6 +47,26 @@ export default function ShiftsBuilder() {
   const clinicName = clinics.find(c => c.id === selectedClinicId)?.name || 'the selected clinic';
 
   useEffect(() => {
+    setRoleFilter('All');
+    setIsAdding(false);
+    setIsEditing(false);
+  }, [selectedDepartmentId]);
+
+  useEffect(() => {
+    async function loadRolesForDept() {
+      if (!selectedDepartmentId) {
+        setAvailableRoles([]);
+        return;
+      }
+      const { data: rolesData } = await supabase
+        .from('staffing_roles')
+        .select('name')
+        .eq('department_id', selectedDepartmentId)
+        .eq('is_active', true);
+      setAvailableRoles(rolesData?.map(r => r.name).sort() || []);
+    }
+    loadRolesForDept();
+
     if (selectedClinicId && selectedDepartmentId) {
       loadRequirements();
     } else {
@@ -87,16 +107,8 @@ export default function ShiftsBuilder() {
   }, [roleFilter]);
 
   async function loadRequirements() {
-    if (!selectedDepartmentId) return;
+    if (!selectedDepartmentId || !selectedClinicId) return;
     setLoading(true);
-
-    const { data: rolesData } = await supabase
-      .from('staffing_roles')
-      .select('name')
-      .eq('department_id', selectedDepartmentId)
-      .eq('is_active', true);
-    
-    setAvailableRoles(rolesData?.map(r => r.name).sort() || []);
 
     const { data, error } = await supabase
       .from('coverage_requirements')

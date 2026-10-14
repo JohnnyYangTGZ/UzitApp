@@ -41,8 +41,8 @@ export default function Sidebar() {
 
   // Reset "ALL" clinic selection if navigating away from the calendar
   useEffect(() => {
-    if (selectedClinicId === 'ALL' && location.pathname !== '/manager/calendar' && clinics.length > 0) {
-      setSelectedClinicId(clinics[0].id);
+    if (selectedClinicId === 'ALL' && location.pathname !== '/manager/calendar') {
+      setSelectedClinicId(clinics.length > 0 ? clinics[0].id : '');
     }
   }, [location.pathname, selectedClinicId, clinics, setSelectedClinicId]);
 

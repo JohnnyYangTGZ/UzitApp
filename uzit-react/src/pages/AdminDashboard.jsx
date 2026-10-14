@@ -40,30 +40,17 @@ export default function AdminDashboard() {
   const [employeeCount, setEmployeeCount] = useState(0); // Keeping for backwards compatibility if used elsewhere
   const [departmentEmployeeCount, setDepartmentEmployeeCount] = useState(0);
   const [clinicSupportCount, setClinicSupportCount] = useState(0);
-  const [clinicDailyShiftCounts, setClinicDailyShiftCounts] = useState({
-    RN: [0, 0, 0, 0, 0, 0, 0],
-    LVN: [0, 0, 0, 0, 0, 0, 0],
-    MA: [0, 0, 0, 0, 0, 0, 0],
-    OTHER: [0, 0, 0, 0, 0, 0, 0]
-  });
-  const [clinicActualShiftCounts, setClinicActualShiftCounts] = useState({
-    RN: [0, 0, 0, 0, 0, 0, 0],
-    LVN: [0, 0, 0, 0, 0, 0, 0],
-    MA: [0, 0, 0, 0, 0, 0, 0],
-    OTHER: [0, 0, 0, 0, 0, 0, 0]
-  });
+  const [departmentRoles, setDepartmentRoles] = useState([]);
+  const [clinicDailyShiftCounts, setClinicDailyShiftCounts] = useState({});
+  const [clinicActualShiftCounts, setClinicActualShiftCounts] = useState({});
   const [staffOff, setStaffOff] = useState([]);
   const [staffOnCall, setStaffOnCall] = useState([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [currentDepartmentId, setCurrentDepartmentId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [activeCell, setActiveCell] = useState(null);
-  const [clinicActualShifts, setClinicActualShifts] = useState({
-    RN: [[], [], [], [], [], [], []],
-    LVN: [[], [], [], [], [], [], []],
-    MA: [[], [], [], [], [], [], []],
-    OTHER: [[], [], [], [], [], [], []]
-  });
+  const [clinicActualShifts, setClinicActualShifts] = useState({});
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isClinicModalOpen, setIsClinicModalOpen] = useState(false);
@@ -103,43 +90,49 @@ export default function AdminDashboard() {
     setHeaderDates(shortDates);
     setFullWeekDateStrs(weekDates);
 
-    if (!selectedClinicId) {
-      setCurrentDepartmentId(selectedDepartmentId || null);
-      setClinicDailyShiftCounts({
-        RN: [0, 0, 0, 0, 0, 0, 0],
-        LVN: [0, 0, 0, 0, 0, 0, 0],
-        MA: [0, 0, 0, 0, 0, 0, 0],
-        OTHER: [0, 0, 0, 0, 0, 0, 0]
-      });
-      setClinicActualShiftCounts({
-        RN: [0, 0, 0, 0, 0, 0, 0],
-        LVN: [0, 0, 0, 0, 0, 0, 0],
-        MA: [0, 0, 0, 0, 0, 0, 0],
-        OTHER: [0, 0, 0, 0, 0, 0, 0]
-      });
-      setClinicActualShifts({
-        RN: [[], [], [], [], [], [], []],
-        LVN: [[], [], [], [], [], [], []],
-        MA: [[], [], [], [], [], [], []],
-        OTHER: [[], [], [], [], [], [], []]
-      });
-      setStaffOff([]);
-      setStaffOnCall([]);
-      setLoadingStats(false);
-      return;
-    }
-
     async function loadClinicData() {
       setLoadingStats(true);
-      // Get selected clinic details to find department_id
-      const { data: clinicData } = await supabase
-        .from('locations')
-        .select('parent_location_id')
-        .eq('id', selectedClinicId)
-        .single();
-      
-      const departmentId = clinicData?.parent_location_id || selectedDepartmentId;
+      let departmentId = selectedDepartmentId;
+
+      if (selectedClinicId && selectedClinicId !== 'ALL') {
+        const { data: clinicData } = await supabase
+          .from('locations')
+          .select('parent_location_id')
+          .eq('id', selectedClinicId)
+          .single();
+        departmentId = clinicData?.parent_location_id || selectedDepartmentId;
+      }
       setCurrentDepartmentId(departmentId);
+
+      // Fetch department roles dynamically
+      let rolesList = [];
+      if (departmentId) {
+        const { data: rolesData } = await supabase
+          .from('staffing_roles')
+          .select('name')
+          .eq('department_id', departmentId)
+          .eq('is_active', true)
+          .order('name');
+        rolesList = (rolesData || []).map(r => r.name.toUpperCase().trim());
+      }
+      setDepartmentRoles(rolesList);
+
+      const emptyCounts = {};
+      const emptyShifts = {};
+      rolesList.forEach(r => {
+        emptyCounts[r] = [0, 0, 0, 0, 0, 0, 0];
+        emptyShifts[r] = [[], [], [], [], [], [], []];
+      });
+
+      if (!selectedClinicId) {
+        setClinicDailyShiftCounts(emptyCounts);
+        setClinicActualShiftCounts(emptyCounts);
+        setClinicActualShifts(emptyShifts);
+        setStaffOff([]);
+        setStaffOnCall([]);
+        setLoadingStats(false);
+        return;
+      }
 
       // 1. Department Employees Count
       if (departmentId) {
@@ -165,51 +158,30 @@ export default function AdminDashboard() {
       setClinicSupportCount(validUserIds.length);
 
       // Fetch Employee Profiles to calculate ACTUAL scheduled shifts
-      const actualShifts = {
-        RN: [[], [], [], [], [], [], []],
-        LVN: [[], [], [], [], [], [], []],
-        MA: [[], [], [], [], [], [], []],
-        OTHER: [[], [], [], [], [], [], []]
-      };
-      
-      const actualCounts = {
-        RN: [0, 0, 0, 0, 0, 0, 0],
-        LVN: [0, 0, 0, 0, 0, 0, 0],
-        MA: [0, 0, 0, 0, 0, 0, 0],
-        OTHER: [0, 0, 0, 0, 0, 0, 0]
-      };
+      const actualShifts = {};
+      const actualCounts = {};
+      rolesList.forEach(r => {
+        actualShifts[r] = [[], [], [], [], [], [], []];
+        actualCounts[r] = [0, 0, 0, 0, 0, 0, 0];
+      });
       
       if (validUserIds.length > 0) {
         const { data: profiles, error: profileError } = await supabase
           .from('employee_profiles')
           .select('user_id, staffing_role, schedule_pattern, shift_time, users!employee_profiles_user_id_fkey(name)')
+          .eq('department_id', departmentId)
           .in('user_id', validUserIds)
           .eq('is_active', true);
           
         if (profileError) console.error('Error fetching profiles:', profileError);
 
         // Calculate exact dates for the 7 days of the week containing selectedDate
-        const targetParts = selectedDate.split('-').map(Number);
-        const targetDate = new Date(targetParts[0], targetParts[1] - 1, targetParts[2], 12, 0, 0);
-        const dayOfWeek = targetDate.getDay(); // 0 = Sunday
-        const sunday = new Date(targetDate);
-        sunday.setDate(targetDate.getDate() - dayOfWeek);
-
-        const weekDates = [];
-        const shortDates = [];
         const weekDateObjs = [];
         for (let i = 0; i < 7; i++) {
           const d = new Date(sunday);
           d.setDate(sunday.getDate() + i);
           weekDateObjs.push(d);
-          const yr = d.getFullYear();
-          const mo = String(d.getMonth() + 1).padStart(2, '0');
-          const da = String(d.getDate()).padStart(2, '0');
-          weekDates.push(`${yr}-${mo}-${da}`);
-          shortDates.push(`${d.getMonth() + 1}/${d.getDate()}`);
         }
-        setHeaderDates(shortDates);
-        setFullWeekDateStrs(weekDates);
 
         const { data: timeOffData } = await supabase
           .from('time_off_requests')
@@ -222,7 +194,7 @@ export default function AdminDashboard() {
         if (profiles) {
           profiles.forEach(prof => {
             let role = prof.staffing_role?.toUpperCase().trim() || 'OTHER';
-            if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
+            if (!actualCounts[role]) return;
             
             let pattern = prof.schedule_pattern;
             if (typeof pattern === 'string') {
@@ -261,20 +233,12 @@ export default function AdminDashboard() {
         .select('staffing_role, required_count, schedule_pattern')
         .eq('location_id', selectedClinicId);
       
-      const dailyCounts = {
-        RN: [0, 0, 0, 0, 0, 0, 0],
-        LVN: [0, 0, 0, 0, 0, 0, 0],
-        MA: [0, 0, 0, 0, 0, 0, 0],
-        OTHER: [0, 0, 0, 0, 0, 0, 0]
-      };
+      const dailyCounts = {};
+      rolesList.forEach(r => {
+        dailyCounts[r] = [0, 0, 0, 0, 0, 0, 0];
+      });
       
       if (reqs) {
-        // Calculate weekDateObjs for requirements if validUserIds was 0
-        const targetParts = selectedDate.split('-').map(Number);
-        const targetDate = new Date(targetParts[0], targetParts[1] - 1, targetParts[2], 12, 0, 0);
-        const dayOfWeek = targetDate.getDay();
-        const sunday = new Date(targetDate);
-        sunday.setDate(targetDate.getDate() - dayOfWeek);
         const reqWeekDateObjs = [];
         for (let i = 0; i < 7; i++) {
           const d = new Date(sunday);
@@ -284,7 +248,7 @@ export default function AdminDashboard() {
 
         reqs.forEach(req => {
           let role = req.staffing_role?.toUpperCase().trim() || 'OTHER';
-          if (!['RN', 'LVN', 'MA'].includes(role)) role = 'OTHER';
+          if (!dailyCounts[role]) return;
           
           let pattern = req.schedule_pattern;
           if (typeof pattern === 'string') {
@@ -355,7 +319,7 @@ export default function AdminDashboard() {
     }
     
     loadClinicData();
-  }, [selectedClinicId, selectedDepartmentId, selectedDate]);
+  }, [selectedClinicId, selectedDepartmentId, selectedDate, refreshTrigger]);
 
   // Determine current date
   const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -461,70 +425,76 @@ export default function AdminDashboard() {
                           );
                         })}
                       </div>
-                      {['RN', 'LVN', 'MA'].map(role => (
-                        <div key={role} className="grid grid-cols-8 gap-2 items-center mb-2">
-                          <div className="text-sm font-bold text-slate-600 text-left">{role}</div>
-                          {clinicActualShiftCounts[role].map((actual, i) => {
-                            const required = clinicDailyShiftCounts[role][i];
-                            const isSelectedColumn = fullWeekDateStrs[i] === selectedDate;
-                            let cellStyle = 'text-slate-300 bg-white border border-slate-100'; // Default / Grey (Actual == 0 && Required == 0)
-                            
-                            if (required > 0 || actual > 0) {
-                              if (actual === required) {
-                                cellStyle = 'bg-emerald-100 text-emerald-700'; // Enough
-                              } else if (actual > required) {
-                                cellStyle = 'bg-amber-100 text-amber-700'; // Too many
-                              } else {
-                                cellStyle = 'bg-rose-100 text-rose-700'; // Not enough
-                              }
-                            }
-                            
-                            const isActive = activeCell?.role === role && activeCell?.dayIndex === i;
-                            const scheduledStaff = clinicActualShifts[role][i] || [];
-                            
-                            return (
-                              <div key={i} className="relative">
-                                <div 
-                                  onClick={() => setActiveCell(isActive ? null : { role, dayIndex: i })}
-                                  className={`text-xs font-semibold rounded-md py-1.5 cursor-pointer hover:opacity-80 transition-all ${cellStyle} flex items-center justify-center gap-1 border-2 ${
-                                    isSelectedColumn 
-                                      ? 'ring-2 ring-blue-500 border-blue-600 shadow-sm font-black' 
-                                      : isActive 
-                                        ? 'border-primary/50' 
-                                        : 'border-transparent'
-                                  }`}
-                                >
-                                  <span>{actual}</span>
-                                  <span className="opacity-60 font-normal text-[10px]">({required})</span>
-                                </div>
-
-                                {isActive && (
-                                  <div className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-lg shadow-xl shadow-slate-200/50 border border-slate-200 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
-                                    <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-1">
-                                      <h5 className="text-xs font-bold text-slate-600">{role} &bull; {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</h5>
-                                      <button onClick={() => setActiveCell(null)} className="text-slate-400 hover:text-slate-600">
-                                        <span className="material-symbols-outlined text-[14px]">close</span>
-                                      </button>
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto pr-1 space-y-2">
-                                      {scheduledStaff.length > 0 ? (
-                                        scheduledStaff.map((staff, idx) => (
-                                          <div key={idx} className="flex justify-between items-center text-xs p-1.5 hover:bg-slate-50 rounded">
-                                            <span className="font-semibold text-slate-800 truncate" title={staff.name}>{staff.name}</span>
-                                            <span className="text-slate-500 font-mono text-[10px] whitespace-nowrap ml-2 bg-slate-100 px-1.5 py-0.5 rounded">{staff.shift_time || 'Var'}</span>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <div className="text-xs text-slate-400 italic text-center py-2">No staff scheduled</div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                      {departmentRoles.length === 0 ? (
+                        <div className="py-6 text-xs text-slate-400 italic text-center border-t border-slate-100 mt-2">
+                          No staffing roles or shifts configured for this department yet.
                         </div>
-                      ))}
+                      ) : (
+                        departmentRoles.map(role => (
+                          <div key={role} className="grid grid-cols-8 gap-2 items-center mb-2">
+                            <div className="text-sm font-bold text-slate-600 text-left">{role}</div>
+                            {(clinicActualShiftCounts[role] || [0, 0, 0, 0, 0, 0, 0]).map((actual, i) => {
+                              const required = (clinicDailyShiftCounts[role] || [0, 0, 0, 0, 0, 0, 0])[i];
+                              const isSelectedColumn = fullWeekDateStrs[i] === selectedDate;
+                              let cellStyle = 'text-slate-300 bg-white border border-slate-100'; // Default / Grey (Actual == 0 && Required == 0)
+                              
+                              if (required > 0 || actual > 0) {
+                                if (actual === required) {
+                                  cellStyle = 'bg-emerald-100 text-emerald-700'; // Enough
+                                } else if (actual > required) {
+                                  cellStyle = 'bg-amber-100 text-amber-700'; // Too many
+                                } else {
+                                  cellStyle = 'bg-rose-100 text-rose-700'; // Not enough
+                                }
+                              }
+                              
+                              const isActive = activeCell?.role === role && activeCell?.dayIndex === i;
+                              const scheduledStaff = clinicActualShifts[role]?.[i] || [];
+                              
+                              return (
+                                <div key={i} className="relative">
+                                  <div 
+                                    onClick={() => setActiveCell(isActive ? null : { role, dayIndex: i })}
+                                    className={`text-xs font-semibold rounded-md py-1.5 cursor-pointer hover:opacity-80 transition-all ${cellStyle} flex items-center justify-center gap-1 border-2 ${
+                                      isSelectedColumn 
+                                        ? 'ring-2 ring-blue-500 border-blue-600 shadow-sm font-black' 
+                                        : isActive 
+                                          ? 'border-primary/50' 
+                                          : 'border-transparent'
+                                    }`}
+                                  >
+                                    <span>{actual}</span>
+                                    <span className="opacity-60 font-normal text-[10px]">({required})</span>
+                                  </div>
+
+                                  {isActive && (
+                                    <div className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-lg shadow-xl shadow-slate-200/50 border border-slate-200 p-3 flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
+                                      <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-1">
+                                        <h5 className="text-xs font-bold text-slate-600">{role} &bull; {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</h5>
+                                        <button onClick={() => setActiveCell(null)} className="text-slate-400 hover:text-slate-600">
+                                          <span className="material-symbols-outlined text-[14px]">close</span>
+                                        </button>
+                                      </div>
+                                      <div className="max-h-48 overflow-y-auto pr-1 space-y-2">
+                                        {scheduledStaff.length > 0 ? (
+                                          scheduledStaff.map((staff, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs p-1.5 hover:bg-slate-50 rounded">
+                                              <span className="font-semibold text-slate-800 truncate" title={staff.name}>{staff.name}</span>
+                                              <span className="text-slate-500 font-mono text-[10px] whitespace-nowrap ml-2 bg-slate-100 px-1.5 py-0.5 rounded">{staff.shift_time || 'Var'}</span>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="text-xs text-slate-400 italic text-center py-2">No staff scheduled</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -678,7 +648,10 @@ export default function AdminDashboard() {
       
       <CreateRoleModal 
         isOpen={isRoleModalOpen} 
-        onClose={() => setIsRoleModalOpen(false)} 
+        onClose={() => {
+          setIsRoleModalOpen(false);
+          setRefreshTrigger(prev => prev + 1);
+        }} 
         departmentId={selectedDepartmentId || currentDepartmentId}
       />
       

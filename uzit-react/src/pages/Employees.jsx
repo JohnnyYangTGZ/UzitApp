@@ -5,6 +5,15 @@ import { useLocationContext } from '../context/LocationContext';
 import { useAuth } from '../context/AuthContext';
 import ScheduleSelector, { DEFAULT_PATTERN } from '../components/ScheduleSelector';
 
+const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':');
+  const d = new Date();
+  d.setHours(parseInt(h, 10));
+  d.setMinutes(parseInt(m, 10));
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+};
+
 export default function Employees() {
   const { selectedDepartmentId, clinics } = useLocationContext();
   const [employees, setEmployees] = useState([]);
@@ -13,6 +22,7 @@ export default function Employees() {
   const [errorMsg, setErrorMsg] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [availableRoles, setAvailableRoles] = useState([]);
+  const [departmentShifts, setDepartmentShifts] = useState([]);
   
   const { user: currentUser } = useAuth();
 
@@ -35,12 +45,32 @@ export default function Employees() {
     schedulePattern: DEFAULT_PATTERN,
     clinics: [], // Array of clinic_ids
     secondary_roles: [], // Array of secondary role strings
+    preferred_shifts: [], // Array of shift custom_ids or IDs
     systemRole: 'staff',
     newPassword: '',
     sick_leave_accrual_date: '',
     sick_leave_accrual_amount: '',
     vacation_accrual_rate: ''
   });
+
+  const getPreferredShifts = (emp) => {
+    if (!emp) return [];
+    let shifts = emp.preferred_shifts;
+    try {
+      const local = localStorage.getItem(`preferred_shifts_${emp.user_id}`);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          shifts = parsed;
+        }
+      }
+    } catch (e) {}
+    if (!shifts) return [];
+    if (typeof shifts === 'string') {
+      try { return JSON.parse(shifts); } catch(e) { return [shifts]; }
+    }
+    return Array.isArray(shifts) ? shifts : [];
+  };
 
   const getAccrualInfo = (emp) => {
     if (!emp) return { sick_leave_accrual_date: '', sick_leave_accrual_amount: '', vacation_accrual_rate: '' };
@@ -143,27 +173,78 @@ export default function Employees() {
         return nameA.localeCompare(nameB);
       });
 
-      setEmployees(sortedData);
+      const processedData = sortedData.map(emp => ({
+        ...emp,
+        preferred_shifts: getPreferredShifts(emp)
+      }));
+
+      setEmployees(processedData);
       setErrorMsg('');
       
       if (selectedEmployee) {
-        const updatedEmployee = sortedData.find(e => e.user_id === selectedEmployee.user_id);
+        const updatedEmployee = processedData.find(e => e.user_id === selectedEmployee.user_id);
         if (updatedEmployee) {
           setSelectedEmployee(updatedEmployee);
         } else {
-          setSelectedEmployee(sortedData.length > 0 ? sortedData[0] : null);
+          setSelectedEmployee(processedData.length > 0 ? processedData[0] : null);
         }
       } else {
-        setSelectedEmployee(sortedData.length > 0 ? sortedData[0] : null);
+        setSelectedEmployee(processedData.length > 0 ? processedData[0] : null);
       }
+    } else {
+      setEmployees([]);
+      setSelectedEmployee(null);
     }
     setLoading(false);
   }
 
+  async function loadDepartmentShifts() {
+    if (!selectedDepartmentId) {
+      setDepartmentShifts([]);
+      return;
+    }
+
+    const clinicIds = (clinics || []).map(c => c.id);
+    const targetLocationIds = [selectedDepartmentId, ...clinicIds];
+
+    const { data, error } = await supabase
+      .from('coverage_requirements')
+      .select('id, custom_id, staffing_role, location_id, start_time, end_time, time_block, schedule_pattern, required_count')
+      .in('location_id', targetLocationIds)
+      .order('custom_id');
+
+    if (!error && data) {
+      setDepartmentShifts(data);
+    } else {
+      console.error('Error fetching department shifts:', error);
+      setDepartmentShifts([]);
+    }
+  }
+
   useEffect(() => {
+    setEmployees([]);
+    setSelectedEmployee(null);
+    setIsEditing(false);
+    setIsCreating(false);
+    setRoleFilter('All');
     loadEmployees();
     loadRoles();
-  }, [selectedDepartmentId]);
+    loadDepartmentShifts();
+  }, [selectedDepartmentId, clinics]);
+
+  const clinicMap = React.useMemo(() => {
+    const map = {};
+    (clinics || []).forEach(c => {
+      map[c.id] = c.name;
+    });
+    return map;
+  }, [clinics]);
+
+  const matchingShifts = React.useMemo(() => {
+    if (!editForm.staffing_role) return [];
+    const roles = [editForm.staffing_role, ...(editForm.secondary_roles || [])];
+    return departmentShifts.filter(s => roles.includes(s.staffing_role));
+  }, [departmentShifts, editForm.staffing_role, editForm.secondary_roles]);
 
   async function loadRoles() {
     if (!selectedDepartmentId) return;
@@ -194,32 +275,33 @@ export default function Employees() {
     return role?.description || roleName || 'Role';
   };
 
-  useEffect(() => {
-    const handleOpenNewEmployee = () => {
-      setSelectedEmployee(null);
-      setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
-      setEditForm({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone_number: '',
-        staffing_role: '',
-        shift_time: '',
-        is_on_call: false,
-        schedulePattern: DEFAULT_PATTERN,
-        clinics: clinics.length > 0 ? [clinics[0].id] : [],
-        secondary_roles: [],
-        systemRole: 'staff',
-        newPassword: '',
-        seniority_date: '',
-        sick_leave_accrual_date: '',
-        sick_leave_accrual_amount: '',
-        vacation_accrual_rate: ''
-      });
-      setIsCreating(true);
-      setIsEditing(true);
-    };
+  const handleOpenNewEmployee = () => {
+    setSelectedEmployee(null);
+    setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
+    setEditForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone_number: '',
+      staffing_role: '',
+      shift_time: '',
+      is_on_call: false,
+      schedulePattern: DEFAULT_PATTERN,
+      clinics: clinics.length > 0 ? [clinics[0].id] : [],
+      secondary_roles: [],
+      preferred_shifts: [],
+      systemRole: 'staff',
+      newPassword: '',
+      seniority_date: '',
+      sick_leave_accrual_date: '',
+      sick_leave_accrual_amount: '',
+      vacation_accrual_rate: ''
+    });
+    setIsCreating(true);
+    setIsEditing(true);
+  };
 
+  useEffect(() => {
     window.addEventListener('open-new-employee', handleOpenNewEmployee);
     return () => window.removeEventListener('open-new-employee', handleOpenNewEmployee);
   }, [clinics]);
@@ -236,6 +318,7 @@ export default function Employees() {
       .filter(Boolean);
 
     const accrualInfo = getAccrualInfo(selectedEmployee);
+    const empPreferredShifts = getPreferredShifts(selectedEmployee);
 
     setFormErrors({ firstName: false, lastName: false, email: false, staffing_role: false, seniority_date: false });
     setEditForm({
@@ -249,6 +332,7 @@ export default function Employees() {
       schedulePattern: selectedEmployee.schedule_pattern || DEFAULT_PATTERN,
       clinics: clinicIds,
       secondary_roles: selectedEmployee.secondary_roles || [],
+      preferred_shifts: empPreferredShifts,
       systemRole: selectedEmployee.users?.role || 'staff',
       newPassword: '',
       seniority_date: selectedEmployee.company_start_date || selectedEmployee.seniority_date || '',
@@ -285,6 +369,42 @@ export default function Employees() {
         return { ...prev, secondary_roles: [...prev.secondary_roles, roleName] };
       }
     });
+  };
+
+  const handleShiftPreferenceToggle = (shift) => {
+    const shiftId = shift.custom_id || shift.id;
+    setEditForm(prev => {
+      const current = prev.preferred_shifts || [];
+      const isSelected = current.includes(shiftId) || current.includes(shift.id);
+      const nextPreferred = isSelected
+        ? current.filter(id => id !== shiftId && id !== shift.id)
+        : [...current, shiftId];
+      
+      let nextClinics = prev.clinics || [];
+      if (!isSelected && shift.location_id && shift.location_id !== selectedDepartmentId && !nextClinics.includes(shift.location_id)) {
+        nextClinics = [...nextClinics, shift.location_id];
+      }
+
+      return {
+        ...prev,
+        preferred_shifts: nextPreferred,
+        clinics: nextClinics
+      };
+    });
+  };
+
+  const applyShiftToForm = (shift) => {
+    let newShiftTime = editForm.shift_time;
+    if (shift.start_time && shift.end_time) {
+      const start = shift.start_time.substring(0, 5);
+      const end = shift.end_time.substring(0, 5);
+      newShiftTime = `${start}-${end}`;
+    }
+    setEditForm(prev => ({
+      ...prev,
+      shift_time: newShiftTime,
+      schedulePattern: shift.schedule_pattern || prev.schedulePattern
+    }));
   };
 
   const handleSave = async () => {
@@ -348,7 +468,7 @@ export default function Employees() {
         return;
       }
 
-      // Save accrual data to localStorage & attempt DB update
+      // Save accrual data & preferred shifts to localStorage & attempt DB update
       const targetUserId = newUser.id;
       const accrualObj = {
         sick_leave_accrual_date: editForm.sick_leave_accrual_date || '',
@@ -356,11 +476,13 @@ export default function Employees() {
         vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? editForm.vacation_accrual_rate : ''
       };
       localStorage.setItem(`accrual_${targetUserId}`, JSON.stringify(accrualObj));
+      localStorage.setItem(`preferred_shifts_${targetUserId}`, JSON.stringify(editForm.preferred_shifts || []));
       try {
         await supabase.from('employee_profiles').update({
           sick_leave_accrual_date: editForm.sick_leave_accrual_date || null,
           sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? parseFloat(editForm.sick_leave_accrual_amount) : null,
-          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null
+          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null,
+          preferred_shifts: editForm.preferred_shifts || []
         }).eq('user_id', targetUserId);
       } catch (e) {}
 
@@ -414,7 +536,7 @@ export default function Employees() {
         return;
       }
 
-      // Save accrual data to localStorage & attempt DB update
+      // Save accrual data & preferred shifts to localStorage & attempt DB update
       const targetUserId = selectedEmployee.user_id;
       const accrualObj = {
         sick_leave_accrual_date: editForm.sick_leave_accrual_date || '',
@@ -422,11 +544,13 @@ export default function Employees() {
         vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? editForm.vacation_accrual_rate : ''
       };
       localStorage.setItem(`accrual_${targetUserId}`, JSON.stringify(accrualObj));
+      localStorage.setItem(`preferred_shifts_${targetUserId}`, JSON.stringify(editForm.preferred_shifts || []));
       try {
         await supabase.from('employee_profiles').update({
           sick_leave_accrual_date: editForm.sick_leave_accrual_date || null,
           sick_leave_accrual_amount: editForm.sick_leave_accrual_amount !== '' ? parseFloat(editForm.sick_leave_accrual_amount) : null,
-          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null
+          vacation_accrual_rate: editForm.vacation_accrual_rate !== '' ? parseFloat(editForm.vacation_accrual_rate) : null,
+          preferred_shifts: editForm.preferred_shifts || []
         }).eq('user_id', targetUserId);
       } catch (e) {}
 
@@ -500,6 +624,14 @@ export default function Employees() {
                 ))}
               </select>
             </div>
+            <button
+              type="button"
+              onClick={handleOpenNewEmployee}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[16px]">person_add</span>
+              New Employee
+            </button>
           </div>
         </div>
 
@@ -562,9 +694,16 @@ export default function Employees() {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
-                              {emp.shift_time || 'Variable'}
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                                {emp.shift_time || 'Variable'}
+                              </span>
+                              {emp.preferred_shifts?.length > 0 && (
+                                <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" title={`Preferred: ${emp.preferred_shifts.join(', ')}`}>
+                                  {emp.preferred_shifts.length === 1 ? emp.preferred_shifts[0] : `${emp.preferred_shifts.length} Preferred`}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             {emp.is_on_call ? (
@@ -637,8 +776,8 @@ export default function Employees() {
                       </div>
                     </div>
 
-                    {/* Body: Structured 4-Column Grid for Zero-Scroll Fit */}
-                    <div className="p-4 flex-1 overflow-hidden space-y-3.5 text-left text-xs">
+                    {/* Body: Structured Layout with Scrollable Area */}
+                    <div className="p-4 flex-1 overflow-y-auto space-y-4 text-left text-xs pr-2">
                       
                       {/* Section 1: Basic Identity & Contact (4 Cols) */}
                       <div>
@@ -866,10 +1005,107 @@ export default function Employees() {
                         </div>
                       </div>
 
-                      {/* Section 4: Secondary Roles & Supported Clinics (2 Cols) */}
+                      {/* Section 4: Shift Preference */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                              4. Shift Preference
+                            </span>
+                            {editForm.staffing_role && (
+                              <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold border border-blue-100">
+                                Matching: {editForm.staffing_role}{editForm.secondary_roles?.length > 0 ? ` + ${editForm.secondary_roles.length} Secondary` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            Select preferred shift template(s) for this staff member
+                          </span>
+                        </div>
+
+                        {!editForm.staffing_role ? (
+                          <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-slate-500 text-center text-xs">
+                            Please select a Primary Role in Section 1 to view available matching shifts.
+                          </div>
+                        ) : matchingShifts.length === 0 ? (
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-xs flex items-center justify-between">
+                            <span>No shift templates found for role <strong>{editForm.staffing_role}</strong> in this department.</span>
+                            <span className="text-[11px] text-slate-400">Configure shifts in Shifts Builder</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {matchingShifts.map(shift => {
+                              const shiftId = shift.custom_id || shift.id;
+                              const isSelected = (editForm.preferred_shifts || []).includes(shiftId) || (editForm.preferred_shifts || []).includes(shift.id);
+                              const clinicName = clinicMap[shift.location_id] || 'Clinic';
+                              const timeStr = shift.start_time && shift.end_time 
+                                ? `${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}` 
+                                : (shift.time_block || 'Standard');
+                              const isSecondary = shift.staffing_role !== editForm.staffing_role;
+
+                              return (
+                                <div
+                                  key={shift.id}
+                                  onClick={() => handleShiftPreferenceToggle(shift)}
+                                  className={`p-2.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                                    isSelected 
+                                      ? 'bg-blue-50/80 border-blue-500 shadow-2xs ring-1 ring-blue-400' 
+                                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                                  }`}
+                                >
+                                  <div>
+                                    <div className="flex items-start justify-between gap-1 mb-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 text-white text-[10px] ${
+                                          isSelected ? 'bg-blue-600' : 'border border-slate-300 bg-white'
+                                        }`}>
+                                          {isSelected && <span className="material-symbols-outlined text-[13px] leading-none">check</span>}
+                                        </div>
+                                        <span className="font-bold text-slate-900 text-xs font-mono truncate">{shift.custom_id || 'Shift'}</span>
+                                      </div>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${
+                                        isSecondary ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
+                                      }`}>
+                                        {shift.staffing_role}
+                                      </span>
+                                    </div>
+                                    
+                                    <div className="flex items-center justify-between text-[11px] text-slate-600 mt-1">
+                                      <span className="flex items-center gap-1 font-mono text-[11px] text-slate-700 font-medium">
+                                        <span className="material-symbols-outlined text-[12px] text-slate-400">schedule</span>
+                                        {timeStr}
+                                      </span>
+                                      <span className="text-slate-400 text-[10px] truncate max-w-[100px]" title={clinicName}>
+                                        {clinicName}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {isSelected && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        applyShiftToForm(shift);
+                                      }}
+                                      className="mt-2 text-[10px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded text-center transition-colors flex items-center justify-center gap-1"
+                                      title="Copy shift start/end hours and schedule pattern to employee form"
+                                    >
+                                      <span className="material-symbols-outlined text-[11px]">sync</span>
+                                      Apply Hours & Pattern
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Section 5: Secondary Roles & Supported Clinics (2 Cols) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                         <div>
-                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Secondary Roles</span>
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">5. Secondary Roles</span>
                           <div className="flex flex-wrap gap-1.5">
                             {availableRoles.filter(r => r.name !== editForm.staffing_role).map(role => {
                               const isSelected = editForm.secondary_roles.includes(role.name);
@@ -917,9 +1153,9 @@ export default function Employees() {
                         </div>
                       </div>
 
-                      {/* Section 5: 2-Week Schedule Pattern */}
+                      {/* Section 6: 2-Week Schedule Pattern */}
                       <div className="pt-1">
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">2-Week Schedule Pattern</span>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">6. 2-Week Schedule Pattern</span>
                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                           <ScheduleSelector 
                             pattern={editForm.schedulePattern} 
@@ -1040,6 +1276,58 @@ export default function Employees() {
                         </div>
                       </div>
 
+                      {/* Shift Preference */}
+                      <div>
+                        <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Shift Preference</h4>
+                        <div className="bg-slate-50 rounded-lg p-4 space-y-2 border border-slate-100">
+                          {(() => {
+                            const preferred = getPreferredShifts(selectedEmployee);
+                            if (!preferred || preferred.length === 0) {
+                              return <span className="text-xs text-slate-500 italic">No shift preference set.</span>;
+                            }
+                            return (
+                              <div className="space-y-2">
+                                {preferred.map((prefShiftId, idx) => {
+                                  const shiftObj = departmentShifts.find(s => s.custom_id === prefShiftId || s.id === prefShiftId);
+                                  const clinicName = shiftObj ? (clinicMap[shiftObj.location_id] || 'Clinic') : '';
+                                  const timeStr = shiftObj && shiftObj.start_time && shiftObj.end_time 
+                                    ? `${formatTime(shiftObj.start_time)} - ${formatTime(shiftObj.end_time)}`
+                                    : (shiftObj?.time_block || '');
+                                  
+                                  return (
+                                    <div key={idx} className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                          <span className="material-symbols-outlined text-[15px]">event_available</span>
+                                        </div>
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-bold text-xs text-slate-900 font-mono">{shiftObj?.custom_id || prefShiftId}</span>
+                                            {shiftObj?.staffing_role && (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase">
+                                                {shiftObj.staffing_role}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {clinicName && (
+                                            <span className="text-[11px] text-slate-400 block">{clinicName}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {timeStr && (
+                                        <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                                          {timeStr}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
                       {/* Leave & Accrual Settings */}
                       <div>
                         <h4 className="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider mb-3">Leave & Accrual Settings</h4>
@@ -1114,9 +1402,23 @@ export default function Employees() {
               );
             })() : (
               <div className="h-full bg-slate-50 border border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 p-8 text-center">
-                <span className="material-symbols-outlined text-4xl mb-3 opacity-50">person_search</span>
-                <p className="font-medium text-slate-600">No employee selected</p>
-                <p className="text-sm mt-1">Click on any employee in the table to view their full details here.</p>
+                <span className="material-symbols-outlined text-4xl mb-3 opacity-50">person_add</span>
+                <p className="font-bold text-slate-700 text-base mb-1">
+                  {employees.length === 0 ? 'No employees in this department' : 'No employee selected'}
+                </p>
+                <p className="text-xs text-slate-500 mb-4 max-w-xs">
+                  {employees.length === 0 
+                    ? 'Get started by creating the first employee for this department.' 
+                    : 'Click on any employee in the table to view their details, or add a new one.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenNewEmployee}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">person_add</span>
+                  New Employee
+                </button>
               </div>
             )}
           </div>
